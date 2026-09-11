@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Check, Dumbbell, Moon } from "lucide-react";
+import { AccountModal, AccountTrigger } from "@/components/auth/AccountModal";
 
 const WORKOUT_HISTORY_KEY = "workout_history";
 const DIET_LOGS_KEY = "diet_logs";
@@ -14,7 +15,7 @@ const TARGETS = {
   calories: 2200,
   protein_g: 140,
   carbs_g: 220,
-  fats_g: 60,
+  fats_g: 65,
 } as const;
 
 const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"] as const;
@@ -31,9 +32,9 @@ const BEDTIME_ITEMS = [
     detail: "Adaptogen support for cortisol and readiness",
   },
   {
-    id: "water",
-    title: "500ml Water",
-    detail: "Rehydrate after the last meal and training",
+    id: "electrolytes",
+    title: "Electrolyte Hydration",
+    detail: "500ml water + electrolytes after training",
   },
   {
     id: "sleep",
@@ -236,7 +237,7 @@ function isBedtimeId(value: unknown): value is BedtimeId {
   return (
     value === "magnesium" ||
     value === "ashwagandha" ||
-    value === "water" ||
+    value === "electrolytes" ||
     value === "sleep"
   );
 }
@@ -384,6 +385,7 @@ export default function PulsePage() {
   const [checked, setChecked] = useState<BedtimeId[]>([]);
   const [activeTrendKey, setActiveTrendKey] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
 
   useEffect(() => {
     setWorkouts(loadWorkoutHistory());
@@ -446,6 +448,21 @@ export default function PulsePage() {
     28
   );
 
+  const gaps = {
+    calories: Math.max(0, TARGETS.calories - totals.calories),
+    protein_g: Math.max(0, TARGETS.protein_g - totals.protein_g),
+    carbs_g: Math.max(0, TARGETS.carbs_g - totals.carbs_g),
+    fats_g: Math.max(0, TARGETS.fats_g - totals.fats_g),
+  };
+  const proteinRatio = totals.protein_g / TARGETS.protein_g;
+  const isEvening = today.getHours() >= 17;
+  const showProteinDeficit = proteinRatio < 0.7;
+  const workoutSets = latestWorkout ? completedSetCount(latestWorkout) : 0;
+  const highIntensity =
+    trainingCompleted &&
+    (workoutSets >= 12 || (latestWorkout ? totalVolumeKg(latestWorkout) >= 2500 : false));
+  const criticalRecovery = trainingCompleted;
+
   const readiness = Math.round(
     (macros.reduce((sum, item) => sum + percent(item.consumed, item.target), 0) /
       macros.length) *
@@ -474,8 +491,11 @@ export default function PulsePage() {
             {formatDate(today)}
           </p>
         </div>
-        <div className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
-          Readiness Score: {readiness}%
+        <div className="flex flex-col items-end gap-2">
+          <AccountTrigger onOpen={() => setAccountOpen(true)} />
+          <div className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+            Readiness Score: {readiness}%
+          </div>
         </div>
       </header>
 
@@ -533,7 +553,7 @@ export default function PulsePage() {
       <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
         <h2 className="text-sm font-semibold">Today&apos;s Macro Overview</h2>
         <p className="mt-1 text-xs text-neutral-500">
-          Target: 2,200 kcal • 140g Protein • 220g Carbs • 60g Fat
+          Target: 2,200 kcal • 140g Protein • 220g Carbs • 65g Fat
         </p>
         <div className="mt-4 flex flex-col gap-4">
           {macros.map((macro) => {
@@ -559,6 +579,49 @@ export default function PulsePage() {
             );
           })}
         </div>
+      </section>
+
+      {showProteinDeficit ? (
+        <section className="mt-5 rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-red-300">
+            Deficit Alert{isEvening ? " • Evening" : ""}
+          </p>
+          <p className="mt-2 text-sm font-semibold text-white">
+            Deficit: {formatAmount(gaps.protein_g, 1)}g Protein
+          </p>
+          <p className="mt-1 text-xs leading-5 text-red-100/80">
+            Suggestion: 1 scoop Whey Isolate or 200g Paneer/Chicken Breast. You are at{" "}
+            {formatAmount(totals.protein_g, 1)}g / {TARGETS.protein_g}g (
+            {Math.round(proteinRatio * 100)}%).
+          </p>
+        </section>
+      ) : null}
+
+      <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
+        <h2 className="text-sm font-semibold">Intelligent Gap Engine</h2>
+        <p className="mt-1 text-xs text-neutral-500">
+          Remaining to hit today&apos;s 2,200 / 140 / 220 / 65 baselines.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <p className="rounded-xl border border-neutral-800 bg-neutral-950/70 px-3 py-2">
+            Calories left: <span className="font-semibold">{formatAmount(gaps.calories)}</span>
+          </p>
+          <p className="rounded-xl border border-neutral-800 bg-neutral-950/70 px-3 py-2">
+            Protein left: <span className="font-semibold">{formatAmount(gaps.protein_g, 1)}g</span>
+          </p>
+          <p className="rounded-xl border border-neutral-800 bg-neutral-950/70 px-3 py-2">
+            Carbs left: <span className="font-semibold">{formatAmount(gaps.carbs_g, 1)}g</span>
+          </p>
+          <p className="rounded-xl border border-neutral-800 bg-neutral-950/70 px-3 py-2">
+            Fats left: <span className="font-semibold">{formatAmount(gaps.fats_g, 1)}g</span>
+          </p>
+        </div>
+        {trainingCompleted ? (
+          <p className="mt-3 text-xs text-emerald-300">
+            {highIntensity ? "High-intensity session logged. " : "Training logged. "}
+            Magnesium Glycinate (400mg) and Electrolyte Hydration are Critical for Recovery.
+          </p>
+        ) : null}
       </section>
 
       <section className="mb-5 mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
@@ -693,13 +756,21 @@ export default function PulsePage() {
                     <Check className="h-4 w-4" />
                   </button>
                   <div>
-                    <h3
-                      className={`text-sm font-semibold ${
-                        isChecked ? "text-neutral-400 line-through" : "text-white"
-                      }`}
-                    >
-                      {item.title}
-                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3
+                        className={`text-sm font-semibold ${
+                          isChecked ? "text-neutral-400 line-through" : "text-white"
+                        }`}
+                      >
+                        {item.title}
+                      </h3>
+                      {criticalRecovery &&
+                      (item.id === "magnesium" || item.id === "electrolytes") ? (
+                        <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+                          Critical for Recovery
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="mt-1 text-xs text-neutral-500">{item.detail}</p>
                   </div>
                 </div>
@@ -708,6 +779,8 @@ export default function PulsePage() {
           })}
         </div>
       </section>
+
+      <AccountModal open={accountOpen} onClose={() => setAccountOpen(false)} />
     </section>
   );
 }

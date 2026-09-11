@@ -46,7 +46,7 @@ export default function RootLayout({
       <body
         className={`${inter.className} min-h-dvh bg-neutral-950 pt-[env(safe-area-inset-top)] text-neutral-50`}
       >
-        <main className="mx-auto min-h-dvh max-w-md overflow-y-auto scroll-smooth border-x border-neutral-800 bg-neutral-950 pb-[calc(9rem+env(safe-area-inset-bottom))] text-neutral-50 shadow-2xl">
+        <main className="relative z-0 mx-auto min-h-dvh max-w-md overflow-y-auto scroll-smooth border-x border-neutral-800 bg-neutral-950 pb-[calc(9rem+env(safe-area-inset-bottom))] text-neutral-50 shadow-2xl">
           {children}
         </main>
         <BottomNav />
