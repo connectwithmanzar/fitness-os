@@ -5,6 +5,7 @@ export type MacroTotals = {
   protein_g: number;
   carbs_g: number;
   fats_g: number;
+  fiber_g: number;
 };
 
 export type PulseTotals = MacroTotals & {
@@ -14,7 +15,7 @@ export type PulseTotals = MacroTotals & {
 export type ProgressTone = "emerald" | "amber" | "red";
 
 export type MacroProgress = {
-  id: "calories" | "protein" | "carbs" | "fats";
+  id: "calories" | "protein" | "carbs" | "fats" | "fiber";
   label: string;
   consumed: number;
   target: number;
@@ -24,7 +25,7 @@ export type MacroProgress = {
 };
 
 export type MicroMarker = {
-  id: keyof Micronutrients;
+  id: "fiber_g" | keyof Micronutrients;
   name: string;
   focus: string;
   consumed: number;
@@ -39,13 +40,20 @@ export type SupplementId =
   | "magnesium"
   | "zinc"
   | "vitamin-d"
-  | "omega-3";
+  | "omega-3"
+  | "fiber";
 
 export type SupplementPrescription = {
   id: SupplementId;
   name: string;
   dosage: string;
   gapLabel: string;
+};
+
+export type SmartRecommendation = {
+  id: "fiber" | "protein" | "magnesium";
+  badge: string;
+  suggestion: string;
 };
 
 export type TrainingStatus = {

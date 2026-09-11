@@ -2,8 +2,25 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Check, Dumbbell, Moon } from "lucide-react";
+import { Activity, Check, ChevronDown, Dumbbell, Moon } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
+import { parseMealScanResult } from "@/lib/diet-parse";
+import type { MealLog } from "@/lib/diet-types";
+import {
+  PULSE_CALORIE_TARGET,
+  PULSE_CARBS_TARGET_G,
+  PULSE_FATS_TARGET_G,
+  PULSE_FIBER_TARGET_G,
+  PULSE_PROTEIN_TARGET_G,
+} from "@/lib/pulse-baselines";
+import {
+  aggregateMealTotals,
+  bedtimeHighlights,
+  buildMacroProgress,
+  buildMicroMarkers,
+  buildSmartRecommendations,
+  remainingOf,
+} from "@/lib/pulse-engine";
 import { getSupabase } from "@/lib/supabaseClient";
 
 const WORKOUT_HISTORY_KEY = "workout_history";
@@ -13,10 +30,11 @@ const BEDTIME_STORAGE_KEY = "pulse_bedtime_checks";
 const PROTEIN_HIT_G = 120;
 
 const TARGETS = {
-  calories: 2200,
-  protein_g: 140,
-  carbs_g: 220,
-  fats_g: 65,
+  calories: PULSE_CALORIE_TARGET,
+  protein_g: PULSE_PROTEIN_TARGET_G,
+  carbs_g: PULSE_CARBS_TARGET_G,
+  fats_g: PULSE_FATS_TARGET_G,
+  fiber_g: PULSE_FIBER_TARGET_G,
 } as const;
 
 const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"] as const;
@@ -68,15 +86,7 @@ type CompletedWorkout = {
   exercises: HistoryExercise[];
 };
 
-type DietLog = {
-  id: string;
-  meal_name: string;
-  logged_at: string;
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fats_g: number;
-};
+type DietLog = MealLog;
 
 type DayTrend = {
   key: string;
@@ -108,10 +118,6 @@ function sameDay(iso: string, key: string): boolean {
     return false;
   }
   return dayKey(date) === key;
-}
-
-function asNumber(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function asString(value: unknown): string | null {
@@ -185,14 +191,16 @@ function parseDietLog(value: unknown): DietLog | null {
   if (!loggedAt) {
     return null;
   }
+  const query = asString(value.query) ?? asString(value.meal_name) ?? "Meal";
+  const scanned = parseMealScanResult(value, query);
+  if (!scanned) {
+    return null;
+  }
   return {
+    ...scanned,
     id: asString(value.id) ?? `${loggedAt}-${Math.random().toString(16).slice(2)}`,
-    meal_name: asString(value.meal_name) ?? "Meal",
+    query,
     logged_at: loggedAt,
-    calories: asNumber(value.calories),
-    protein_g: asNumber(value.protein_g),
-    carbs_g: asNumber(value.carbs_g),
-    fats_g: asNumber(value.fats_g),
   };
 }
 
@@ -388,11 +396,27 @@ export default function PulsePage() {
   const [hydrated, setHydrated] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(true);
 
   useEffect(() => {
-    setWorkouts(loadWorkoutHistory());
-    setMeals(loadDietLogs());
-    setChecked(loadBedtimeChecks(todayKey));
+    const nextWorkouts = loadWorkoutHistory();
+    const nextMeals = loadDietLogs();
+    const storedChecks = loadBedtimeChecks(todayKey);
+    setWorkouts(nextWorkouts);
+    setMeals(nextMeals);
+
+    const todaysMealLogs = nextMeals.filter((log) => sameDay(log.logged_at, todayKey));
+    const workoutDone = nextWorkouts.some((entry) => sameDay(entry.completedAt, todayKey));
+    const dayTotals = aggregateMealTotals(todaysMealLogs);
+    const highlights = bedtimeHighlights(dayTotals, workoutDone);
+    const recommended: BedtimeId[] = [];
+    if (highlights.magnesium) {
+      recommended.push("magnesium");
+    }
+    if (highlights.electrolytes) {
+      recommended.push("electrolytes");
+    }
+    setChecked(storedChecks.length === 0 ? recommended : storedChecks);
     setHydrated(true);
 
     const client = getSupabase();
@@ -436,26 +460,17 @@ export default function PulsePage() {
     [meals, todayKey]
   );
 
-  const totals = useMemo(
-    () =>
-      todaysMeals.reduce(
-        (acc, log) => ({
-          calories: acc.calories + log.calories,
-          protein_g: acc.protein_g + log.protein_g,
-          carbs_g: acc.carbs_g + log.carbs_g,
-          fats_g: acc.fats_g + log.fats_g,
-        }),
-        { calories: 0, protein_g: 0, carbs_g: 0, fats_g: 0 }
-      ),
-    [todaysMeals]
+  const totals = useMemo(() => aggregateMealTotals(todaysMeals), [todaysMeals]);
+  const macros = useMemo(() => buildMacroProgress(totals), [totals]);
+  const microAudit = useMemo(() => buildMicroMarkers(totals), [totals]);
+  const recommendations = useMemo(
+    () => buildSmartRecommendations(totals, trainingCompleted),
+    [totals, trainingCompleted]
   );
-
-  const macros = [
-    { label: "Calories", consumed: totals.calories, target: TARGETS.calories, unit: "kcal" },
-    { label: "Protein", consumed: totals.protein_g, target: TARGETS.protein_g, unit: "g" },
-    { label: "Carbs", consumed: totals.carbs_g, target: TARGETS.carbs_g, unit: "g" },
-    { label: "Fat", consumed: totals.fats_g, target: TARGETS.fats_g, unit: "g" },
-  ];
+  const recoveryFlags = useMemo(
+    () => bedtimeHighlights(totals, trainingCompleted),
+    [totals, trainingCompleted]
+  );
 
   const weekTrends = useMemo(
     () => buildWeekTrends(today, meals, workouts),
@@ -471,19 +486,16 @@ export default function PulsePage() {
   );
 
   const gaps = {
-    calories: Math.max(0, TARGETS.calories - totals.calories),
-    protein_g: Math.max(0, TARGETS.protein_g - totals.protein_g),
-    carbs_g: Math.max(0, TARGETS.carbs_g - totals.carbs_g),
-    fats_g: Math.max(0, TARGETS.fats_g - totals.fats_g),
+    calories: remainingOf(totals.calories, TARGETS.calories),
+    protein_g: remainingOf(totals.protein_g, TARGETS.protein_g),
+    carbs_g: remainingOf(totals.carbs_g, TARGETS.carbs_g),
+    fats_g: remainingOf(totals.fats_g, TARGETS.fats_g),
+    fiber_g: remainingOf(totals.fiber_g, TARGETS.fiber_g),
   };
-  const proteinRatio = totals.protein_g / TARGETS.protein_g;
-  const isEvening = today.getHours() >= 17;
-  const showProteinDeficit = proteinRatio < 0.7;
   const workoutSets = latestWorkout ? completedSetCount(latestWorkout) : 0;
   const highIntensity =
     trainingCompleted &&
     (workoutSets >= 12 || (latestWorkout ? totalVolumeKg(latestWorkout) >= 2500 : false));
-  const criticalRecovery = trainingCompleted;
 
   const readiness = Math.round(
     (macros.reduce((sum, item) => sum + percent(item.consumed, item.target), 0) /
@@ -575,11 +587,11 @@ export default function PulsePage() {
       <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
         <h2 className="text-sm font-semibold">Today&apos;s Macro Overview</h2>
         <p className="mt-1 text-xs text-neutral-500">
-          Target: 2,200 kcal • 140g Protein • 220g Carbs • 65g Fat
+          DRI: 2,200 kcal • 140g Protein • 220g Carbs • 65g Fat • 35g Fiber
         </p>
         <div className="mt-4 flex flex-col gap-4">
           {macros.map((macro) => {
-            const value = percent(macro.consumed, macro.target);
+            const value = macro.percent;
             const barTone =
               value >= 80 ? "bg-emerald-500" : value >= 40 ? "bg-amber-400" : "bg-red-500";
             return (
@@ -587,7 +599,7 @@ export default function PulsePage() {
                 <div className="flex items-center justify-between text-sm">
                   <span>{macro.label}</span>
                   <span className="font-mono text-xs text-neutral-400">
-                    {formatAmount(macro.consumed, macro.label === "Calories" ? 0 : 1)} /{" "}
+                    {formatAmount(macro.consumed, macro.id === "calories" ? 0 : 1)} /{" "}
                     {formatAmount(macro.target)} {macro.unit}
                   </span>
                 </div>
@@ -603,27 +615,48 @@ export default function PulsePage() {
         </div>
       </section>
 
-      {showProteinDeficit ? (
-        <section className="mt-5 rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-red-300">
-            Deficit Alert{isEvening ? " • Evening" : ""}
-          </p>
-          <p className="mt-2 text-sm font-semibold text-white">
-            Deficit: {formatAmount(gaps.protein_g, 1)}g Protein
-          </p>
-          <p className="mt-1 text-xs leading-5 text-red-100/80">
-            Suggestion: 1 scoop Whey Isolate or 200g Paneer/Chicken Breast. You are at{" "}
-            {formatAmount(totals.protein_g, 1)}g / {TARGETS.protein_g}g (
-            {Math.round(proteinRatio * 100)}%).
-          </p>
-        </section>
-      ) : null}
-
       <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
-        <h2 className="text-sm font-semibold">Intelligent Gap Engine</h2>
+        <h2 className="text-sm font-semibold">Smart Deficit &amp; Supplement Recommendation</h2>
         <p className="mt-1 text-xs text-neutral-500">
-          Remaining to hit today&apos;s 2,200 / 140 / 220 / 65 baselines.
+          Live gaps from today&apos;s local meal logs against DRI.
         </p>
+
+        {recommendations.length === 0 ? (
+          <p className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+            No critical fiber, protein, or magnesium gaps right now. Keep logging meals.
+          </p>
+        ) : (
+          <div className="mt-3 flex flex-col gap-3">
+            {recommendations.map((item) => (
+              <article
+                key={item.id}
+                className={`rounded-xl border p-3 ${
+                  item.id === "protein"
+                    ? "border-red-500/40 bg-red-500/10"
+                    : item.id === "fiber"
+                      ? "border-amber-400/40 bg-amber-400/10"
+                      : "border-emerald-500/30 bg-emerald-500/10"
+                }`}
+              >
+                <p
+                  className={`text-[11px] font-semibold uppercase tracking-wide ${
+                    item.id === "protein"
+                      ? "text-red-300"
+                      : item.id === "fiber"
+                        ? "text-amber-300"
+                        : "text-emerald-300"
+                  }`}
+                >
+                  {item.badge}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-neutral-200">
+                  Suggestion: {item.suggestion}
+                </p>
+              </article>
+            ))}
+          </div>
+        )}
+
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
           <p className="rounded-xl border border-neutral-800 bg-neutral-950/70 px-3 py-2">
             Calories left: <span className="font-semibold">{formatAmount(gaps.calories)}</span>
@@ -635,7 +668,7 @@ export default function PulsePage() {
             Carbs left: <span className="font-semibold">{formatAmount(gaps.carbs_g, 1)}g</span>
           </p>
           <p className="rounded-xl border border-neutral-800 bg-neutral-950/70 px-3 py-2">
-            Fats left: <span className="font-semibold">{formatAmount(gaps.fats_g, 1)}g</span>
+            Fiber left: <span className="font-semibold">{formatAmount(gaps.fiber_g, 1)}g</span>
           </p>
         </div>
         {trainingCompleted ? (
@@ -643,6 +676,53 @@ export default function PulsePage() {
             {highIntensity ? "High-intensity session logged. " : "Training logged. "}
             Magnesium Glycinate (400mg) and Electrolyte Hydration are Critical for Recovery.
           </p>
+        ) : null}
+      </section>
+
+      <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
+        <button
+          type="button"
+          onClick={() => setAuditOpen((open) => !open)}
+          className="flex w-full items-center justify-between text-left"
+          aria-expanded={auditOpen}
+        >
+          <div>
+            <h2 className="text-sm font-semibold">Micronutrient Audit</h2>
+            <p className="mt-1 text-xs text-neutral-500">
+              Fiber, Iron, Calcium, Magnesium, Zinc vs DRI.
+            </p>
+          </div>
+          <ChevronDown
+            className={`h-4 w-4 text-neutral-400 transition ${auditOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        {auditOpen ? (
+          <div className="mt-4 flex flex-col gap-4">
+            {microAudit.map((marker) => {
+              const barTone = marker.deficient
+                ? "bg-red-500"
+                : marker.percent >= 80
+                  ? "bg-emerald-500"
+                  : "bg-amber-400";
+              return (
+                <div key={marker.id}>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-white">{marker.name}</span>
+                    <span className="font-mono text-xs text-neutral-400">
+                      {formatAmount(marker.consumed, 1)} / {formatAmount(marker.target)}{" "}
+                      {marker.unit} • {marker.percent}%
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-neutral-800">
+                    <div
+                      className={`h-full rounded-full transition-all ${barTone}`}
+                      style={{ width: `${marker.percent}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         ) : null}
       </section>
 
@@ -761,7 +841,12 @@ export default function PulsePage() {
             return (
               <article
                 key={item.id}
-                className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-3"
+                className={`rounded-xl border p-3 ${
+                  (item.id === "magnesium" && recoveryFlags.magnesium) ||
+                  (item.id === "electrolytes" && recoveryFlags.electrolytes)
+                    ? "border-amber-400/40 bg-amber-400/5"
+                    : "border-neutral-800 bg-neutral-950/60"
+                }`}
               >
                 <div className="flex items-start gap-3">
                   <button
@@ -786,10 +871,10 @@ export default function PulsePage() {
                       >
                         {item.title}
                       </h3>
-                      {criticalRecovery &&
-                      (item.id === "magnesium" || item.id === "electrolytes") ? (
+                      {(item.id === "magnesium" && recoveryFlags.magnesium) ||
+                      (item.id === "electrolytes" && recoveryFlags.electrolytes) ? (
                         <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
-                          Critical for Recovery
+                          {isChecked ? "Stacked" : "Recommended"}
                         </span>
                       ) : null}
                     </div>

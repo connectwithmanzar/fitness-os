@@ -17,6 +17,7 @@ const SUPPLEMENT_IDS: SupplementId[] = [
   "zinc",
   "vitamin-d",
   "omega-3",
+  "fiber",
 ];
 
 function isSupplementId(value: unknown): value is SupplementId {

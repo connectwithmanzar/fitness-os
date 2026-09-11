@@ -1,4 +1,9 @@
-import type { MealScanResult, Micronutrients } from "@/lib/diet-types";
+import {
+  EMPTY_MICRONUTRIENTS,
+  toMicrosRecord,
+  type MealScanResult,
+  type Micronutrients,
+} from "@/lib/diet-types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -23,14 +28,32 @@ function asString(value: unknown, fallback: string): string {
     : fallback;
 }
 
-function parseMicros(value: unknown): Micronutrients {
-  const record = isRecord(value) ? value : {};
+function pickNumber(
+  record: Record<string, unknown>,
+  keys: string[],
+  fallback = 0
+): number {
+  for (const key of keys) {
+    if (key in record) {
+      return asNumber(record[key], fallback);
+    }
+  }
+  return fallback;
+}
+
+export function parseMicros(value: unknown, extra?: Record<string, unknown>): Micronutrients {
+  const nested = isRecord(value) ? value : {};
+  const source = extra ?? {};
   return {
-    iron_mg: asNumber(record.iron_mg),
-    zinc_mg: asNumber(record.zinc_mg),
-    magnesium_mg: asNumber(record.magnesium_mg),
-    vitamin_d_iu: asNumber(record.vitamin_d_iu),
-    calcium_mg: asNumber(record.calcium_mg),
+    iron_mg: pickNumber(nested, ["iron_mg"]) || asNumber(source.iron_mg),
+    calcium_mg: pickNumber(nested, ["calcium_mg"]) || asNumber(source.calcium_mg),
+    magnesium_mg:
+      pickNumber(nested, ["magnesium_mg"]) || asNumber(source.magnesium_mg),
+    zinc_mg: pickNumber(nested, ["zinc_mg"]) || asNumber(source.zinc_mg),
+    vitamin_d_iu:
+      pickNumber(nested, ["vitamin_d_iu"]) || asNumber(source.vitamin_d_iu),
+    vitamin_b12_mcg:
+      pickNumber(nested, ["vitamin_b12_mcg"]) || asNumber(source.vitamin_b12_mcg),
   };
 }
 
@@ -47,14 +70,27 @@ export function parseMealScanResult(
     return null;
   }
 
+  const fiber = pickNumber(value, ["fiber", "fiber_g"]);
+  const micros = parseMicros(
+    isRecord(value.micros) ? value.micros : value.micronutrients,
+    value
+  );
+  const safeMicros: Micronutrients = {
+    ...EMPTY_MICRONUTRIENTS,
+    ...micros,
+  };
+
   return {
     meal_name: mealName,
     serving_inferred: asString(value.serving_inferred, fallbackQuery),
     calories: asNumber(value.calories),
-    protein_g: asNumber(value.protein_g),
-    carbs_g: asNumber(value.carbs_g),
-    fats_g: asNumber(value.fats_g),
-    micronutrients: parseMicros(value.micronutrients),
+    protein_g: pickNumber(value, ["protein_g", "protein"]),
+    carbs_g: pickNumber(value, ["carbs_g", "carbs"]),
+    fats_g: pickNumber(value, ["fats_g", "fat", "fats"]),
+    fiber,
+    fiber_g: Number.isFinite(fiber) ? fiber : 0,
+    micros: toMicrosRecord(safeMicros),
+    micronutrients: safeMicros,
     breakdown_summary: asString(
       value.breakdown_summary,
       "Estimated from the logged Indian meal description."

@@ -1,19 +1,41 @@
+import { parseMealScanResult } from "@/lib/diet-parse";
 import { LOCAL_MEAL_LOGS_KEY } from "@/lib/diet-types";
 import type { MealLog } from "@/lib/diet-types";
 
-function isMealLog(value: unknown): value is MealLog {
-  if (typeof value !== "object" || value === null) {
-    return false;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeMealLog(value: unknown): MealLog | null {
+  if (!isRecord(value)) {
+    return null;
   }
-  const record = value as MealLog;
-  return (
-    typeof record.id === "string" &&
-    typeof record.meal_name === "string" &&
-    typeof record.logged_at === "string" &&
-    typeof record.calories === "number" &&
-    typeof record.micronutrients === "object" &&
-    record.micronutrients !== null
-  );
+  const id = typeof value.id === "string" ? value.id : null;
+  const loggedAt =
+    typeof value.logged_at === "string"
+      ? value.logged_at
+      : typeof value.created_at === "string"
+        ? value.created_at
+        : null;
+  if (!id || !loggedAt) {
+    return null;
+  }
+  const query =
+    typeof value.query === "string"
+      ? value.query
+      : typeof value.meal_name === "string"
+        ? value.meal_name
+        : "Meal";
+  const scanned = parseMealScanResult(value, query);
+  if (!scanned) {
+    return null;
+  }
+  return {
+    ...scanned,
+    id,
+    query,
+    logged_at: loggedAt,
+  };
 }
 
 export function loadLocalMealLogs(): MealLog[] {
@@ -30,7 +52,9 @@ export function loadLocalMealLogs(): MealLog[] {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed.filter(isMealLog);
+    return parsed
+      .map(normalizeMealLog)
+      .filter((log): log is MealLog => log !== null);
   } catch {
     return [];
   }

@@ -15,8 +15,8 @@ import {
   fetchRemoteMealLogs,
   insertRemoteMealLog,
 } from "@/lib/diet-sync";
-import { DAILY_MACRO_TARGETS } from "@/lib/diet-types";
-import type { MealLog, MealScanResult } from "@/lib/diet-types";
+import { DAILY_MACRO_TARGETS, fiberFromEntry } from "@/lib/diet-types";
+import type { DietEntry, MealLog, MealScanResult } from "@/lib/diet-types";
 
 const SHORTCUTS = [
   "+ 1 Katori Dal",
@@ -156,7 +156,7 @@ export default function DietPage() {
   }, [expandedId]);
 
   return (
-    <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-32 pt-6 text-neutral-50">
+    <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-36 pt-6 text-neutral-50">
       <header>
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
           Module 2
@@ -255,8 +255,9 @@ export default function DietPage() {
               No meals yet. Log a roti, katori, or gram-based plate to start the day.
             </div>
           ) : (
-            logs.map((log) => {
+            logs.map((log: DietEntry & MealLog) => {
               const expanded = expandedId === log.id;
+              const fiberG = fiberFromEntry(log);
               return (
                 <article
                   key={log.id}
@@ -298,6 +299,9 @@ export default function DietPage() {
                     <span className="rounded-full border border-neutral-800 px-2.5 py-1 text-neutral-300">
                       F: {formatNumber(log.fats_g, 1)}g
                     </span>
+                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-emerald-300">
+                      Fiber: {formatNumber(fiberG, 0)}g
+                    </span>
                   </div>
 
                   <button
@@ -324,8 +328,11 @@ export default function DietPage() {
                       <p>
                         Calcium: {formatNumber(log.micronutrients.calcium_mg, 1)} mg
                       </p>
-                      <p className="col-span-2 text-neutral-500">
+                      <p>
                         Vitamin D: {formatNumber(log.micronutrients.vitamin_d_iu, 1)} IU
+                      </p>
+                      <p>
+                        B12: {formatNumber(log.micronutrients.vitamin_b12_mcg, 2)} mcg
                       </p>
                       {log.breakdown_summary ? (
                         <p className="col-span-2 text-neutral-500">

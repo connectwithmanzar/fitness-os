@@ -1,8 +1,9 @@
-import type { MealLog, Micronutrients } from "@/lib/diet-types";
+import { EMPTY_MICRONUTRIENTS, fiberFromEntry, type MealLog } from "@/lib/diet-types";
 import {
   PULSE_CALORIE_TARGET,
   PULSE_CARBS_TARGET_G,
   PULSE_FATS_TARGET_G,
+  PULSE_FIBER_TARGET_G,
   PULSE_MICRO_TARGETS,
   PULSE_PROTEIN_TARGET_G,
 } from "@/lib/pulse-baselines";
@@ -11,16 +12,9 @@ import type {
   MicroMarker,
   ProgressTone,
   PulseTotals,
+  SmartRecommendation,
   SupplementPrescription,
 } from "@/lib/pulse-types";
-
-const EMPTY_MICROS: Micronutrients = {
-  iron_mg: 0,
-  zinc_mg: 0,
-  magnesium_mg: 0,
-  vitamin_d_iu: 0,
-  calcium_mg: 0,
-};
 
 export function emptyPulseTotals(): PulseTotals {
   return {
@@ -28,7 +22,8 @@ export function emptyPulseTotals(): PulseTotals {
     protein_g: 0,
     carbs_g: 0,
     fats_g: 0,
-    micronutrients: { ...EMPTY_MICROS },
+    fiber_g: 0,
+    micronutrients: { ...EMPTY_MICRONUTRIENTS },
   };
 }
 
@@ -39,6 +34,7 @@ export function aggregateMealTotals(logs: MealLog[]): PulseTotals {
       protein_g: totals.protein_g + log.protein_g,
       carbs_g: totals.carbs_g + log.carbs_g,
       fats_g: totals.fats_g + log.fats_g,
+      fiber_g: totals.fiber_g + fiberFromEntry(log),
       micronutrients: {
         iron_mg: totals.micronutrients.iron_mg + log.micronutrients.iron_mg,
         zinc_mg: totals.micronutrients.zinc_mg + log.micronutrients.zinc_mg,
@@ -48,9 +44,16 @@ export function aggregateMealTotals(logs: MealLog[]): PulseTotals {
           totals.micronutrients.vitamin_d_iu + log.micronutrients.vitamin_d_iu,
         calcium_mg:
           totals.micronutrients.calcium_mg + log.micronutrients.calcium_mg,
+        vitamin_b12_mcg:
+          totals.micronutrients.vitamin_b12_mcg +
+          log.micronutrients.vitamin_b12_mcg,
       },
     };
   }, emptyPulseTotals());
+}
+
+export function remainingOf(consumed: number, target: number): number {
+  return Math.max(0, target - consumed);
 }
 
 export function clampPercent(consumed: number, target: number): number {
@@ -100,6 +103,13 @@ export function buildMacroProgress(totals: PulseTotals): MacroProgress[] {
       target: PULSE_FATS_TARGET_G,
       unit: "g",
     },
+    {
+      id: "fiber",
+      label: "Fiber",
+      consumed: totals.fiber_g,
+      target: PULSE_FIBER_TARGET_G,
+      unit: "g",
+    },
   ];
 
   return rows.map((row) => {
@@ -111,33 +121,17 @@ export function buildMacroProgress(totals: PulseTotals): MacroProgress[] {
 export function buildMicroMarkers(totals: PulseTotals): MicroMarker[] {
   const markers: Array<Omit<MicroMarker, "percent" | "deficient">> = [
     {
-      id: "magnesium_mg",
-      name: "Magnesium",
-      focus: "Recovery & Sleep",
-      consumed: totals.micronutrients.magnesium_mg,
-      target: PULSE_MICRO_TARGETS.magnesium_mg,
-      unit: "mg",
-    },
-    {
-      id: "vitamin_d_iu",
-      name: "Vitamin D",
-      focus: "Immunity & Bone Density",
-      consumed: totals.micronutrients.vitamin_d_iu,
-      target: PULSE_MICRO_TARGETS.vitamin_d_iu,
-      unit: "IU",
-    },
-    {
-      id: "zinc_mg",
-      name: "Zinc",
-      focus: "Hormonal Balance & Recovery",
-      consumed: totals.micronutrients.zinc_mg,
-      target: PULSE_MICRO_TARGETS.zinc_mg,
-      unit: "mg",
+      id: "fiber_g",
+      name: "Fiber",
+      focus: "Digestive load",
+      consumed: totals.fiber_g,
+      target: PULSE_FIBER_TARGET_G,
+      unit: "g",
     },
     {
       id: "iron_mg",
       name: "Iron",
-      focus: "Energy & Oxygen Transport",
+      focus: "Energy & oxygen transport",
       consumed: totals.micronutrients.iron_mg,
       target: PULSE_MICRO_TARGETS.iron_mg,
       unit: "mg",
@@ -145,9 +139,25 @@ export function buildMicroMarkers(totals: PulseTotals): MicroMarker[] {
     {
       id: "calcium_mg",
       name: "Calcium",
-      focus: "Bone Strength",
+      focus: "Bone strength",
       consumed: totals.micronutrients.calcium_mg,
       target: PULSE_MICRO_TARGETS.calcium_mg,
+      unit: "mg",
+    },
+    {
+      id: "magnesium_mg",
+      name: "Magnesium",
+      focus: "Recovery & sleep",
+      consumed: totals.micronutrients.magnesium_mg,
+      target: PULSE_MICRO_TARGETS.magnesium_mg,
+      unit: "mg",
+    },
+    {
+      id: "zinc_mg",
+      name: "Zinc",
+      focus: "Hormonal recovery",
+      consumed: totals.micronutrients.zinc_mg,
+      target: PULSE_MICRO_TARGETS.zinc_mg,
       unit: "mg",
     },
   ];
@@ -166,14 +176,79 @@ function mealsMentionOmega3(logs: MealLog[]): boolean {
   );
 }
 
+export function buildSmartRecommendations(
+  totals: PulseTotals,
+  workoutCompleted: boolean
+): SmartRecommendation[] {
+  const recommendations: SmartRecommendation[] = [];
+  const fiberRemaining = remainingOf(totals.fiber_g, PULSE_FIBER_TARGET_G);
+  const proteinRemaining = remainingOf(totals.protein_g, PULSE_PROTEIN_TARGET_G);
+  const magnesiumRemaining = remainingOf(
+    totals.micronutrients.magnesium_mg,
+    PULSE_MICRO_TARGETS.magnesium_mg
+  );
+
+  if (fiberRemaining > 15) {
+    recommendations.push({
+      id: "fiber",
+      badge: `Fiber Gap: ${Math.round(fiberRemaining)}g short`,
+      suggestion:
+        "Add 2 tbsp Chia seeds, Oats, or Isabgol (Psyllium Husk) to avoid digestive drag.",
+    });
+  }
+
+  if (proteinRemaining > 30) {
+    recommendations.push({
+      id: "protein",
+      badge: `Protein Gap: ${Math.round(proteinRemaining)}g short`,
+      suggestion: "1 scoop Whey Isolate (25g) or 200g Paneer/Soya chunks.",
+    });
+  }
+
+  if (magnesiumRemaining > 200 || workoutCompleted) {
+    recommendations.push({
+      id: "magnesium",
+      badge: "Recovery Gap: Magnesium low after training",
+      suggestion:
+        "Take 400mg Magnesium Glycinate before bed for deep slow-wave sleep.",
+    });
+  }
+
+  return recommendations;
+}
+
+export function bedtimeHighlights(
+  totals: PulseTotals,
+  workoutCompleted: boolean
+): { magnesium: boolean; electrolytes: boolean } {
+  const magnesiumRemaining = remainingOf(
+    totals.micronutrients.magnesium_mg,
+    PULSE_MICRO_TARGETS.magnesium_mg
+  );
+  return {
+    magnesium: magnesiumRemaining > 200 || workoutCompleted,
+    electrolytes: workoutCompleted,
+  };
+}
+
 export function buildSupplementPrescriptions(
   totals: PulseTotals,
   logs: MealLog[]
 ): SupplementPrescription[] {
   const prescriptions: SupplementPrescription[] = [];
   const proteinGap = PULSE_PROTEIN_TARGET_G - totals.protein_g;
+  const fiberGap = PULSE_FIBER_TARGET_G - totals.fiber_g;
 
-  if (proteinGap > 25) {
+  if (fiberGap > 15) {
+    prescriptions.push({
+      id: "fiber",
+      name: "Chia / Isabgol",
+      dosage: "2 tbsp chia, oats, or psyllium husk",
+      gapLabel: `Bridges your ${Math.round(fiberGap)}g fiber deficit`,
+    });
+  }
+
+  if (proteinGap > 30) {
     prescriptions.push({
       id: "whey",
       name: "Whey Isolate",
@@ -182,7 +257,7 @@ export function buildSupplementPrescriptions(
     });
   }
 
-  if (totals.micronutrients.magnesium_mg < 300) {
+  if (totals.micronutrients.magnesium_mg < 200) {
     const magnesiumGap = Math.max(
       0,
       PULSE_MICRO_TARGETS.magnesium_mg - totals.micronutrients.magnesium_mg
