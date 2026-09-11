@@ -68,7 +68,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
       if (sessionError) {
         setError(sessionError.message);
       }
-      setUserEmail(data.session?.user.email ?? null);
+      setUserEmail(data?.session?.user?.email ?? null);
     };
 
     void load();
@@ -101,9 +101,9 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
           setError(signUpError.message);
           return;
         }
-        if (data.session) {
+        if (data?.session) {
           setGuestMode(false);
-          setUserEmail(data.user.email ?? email);
+          setUserEmail(data?.user?.email ?? email);
           onAuthChange?.(true);
           return;
         }
@@ -121,7 +121,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
         return;
       }
       setGuestMode(false);
-      setUserEmail(data.user.email ?? email);
+      setUserEmail(data?.user?.email ?? email);
       onAuthChange?.(true);
       onClose();
     } catch {
