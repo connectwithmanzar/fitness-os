@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Check, Plus, Search, Trash2, X } from "lucide-react";
-import { AccountModal, AccountTrigger } from "@/components/auth/AccountModal";
+import { AccountButton, AuthModal } from "@/components/AuthModal";
+import { getSupabase } from "@/lib/supabaseClient";
 import {
   appendWorkoutHistory,
   completedSetCount,
@@ -108,7 +109,8 @@ export default function WorkoutPage() {
   const [session, setSession] = useState<ActiveWorkoutSession | null>(null);
   const [history, setHistory] = useState<CompletedWorkout[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<ExerciseFilter>("All");
   const [customName, setCustomName] = useState("");
@@ -130,6 +132,26 @@ export default function WorkoutPage() {
     }
     setHistory(loadWorkoutHistory());
     setHydrated(true);
+
+    const client = getSupabase();
+    if (!client) {
+      return;
+    }
+    let active = true;
+    const syncAuth = async () => {
+      const { data } = await client.auth.getSession();
+      if (active) {
+        setIsSignedIn(Boolean(data.session));
+      }
+    };
+    void syncAuth();
+    const { data: authListener } = client.auth.onAuthStateChange((_event, nextSession) => {
+      setIsSignedIn(Boolean(nextSession));
+    });
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -234,7 +256,7 @@ export default function WorkoutPage() {
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <AccountTrigger onOpen={() => setAccountOpen(true)} />
+          <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
           <button
             type="button"
             onClick={() => {
@@ -552,7 +574,11 @@ export default function WorkoutPage() {
         </div>
       ) : null}
 
-      <AccountModal open={accountOpen} onClose={() => setAccountOpen(false)} />
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onAuthChange={setIsSignedIn}
+      />
     </section>
   );
 }

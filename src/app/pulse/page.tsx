@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Check, Dumbbell, Moon } from "lucide-react";
-import { AccountModal, AccountTrigger } from "@/components/auth/AccountModal";
+import { AccountButton, AuthModal } from "@/components/AuthModal";
+import { getSupabase } from "@/lib/supabaseClient";
 
 const WORKOUT_HISTORY_KEY = "workout_history";
 const DIET_LOGS_KEY = "diet_logs";
@@ -385,13 +386,34 @@ export default function PulsePage() {
   const [checked, setChecked] = useState<BedtimeId[]>([]);
   const [activeTrendKey, setActiveTrendKey] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(false);
 
   useEffect(() => {
     setWorkouts(loadWorkoutHistory());
     setMeals(loadDietLogs());
     setChecked(loadBedtimeChecks(todayKey));
     setHydrated(true);
+
+    const client = getSupabase();
+    if (!client) {
+      return;
+    }
+    let active = true;
+    const syncAuth = async () => {
+      const { data } = await client.auth.getSession();
+      if (active) {
+        setIsSignedIn(Boolean(data.session));
+      }
+    };
+    void syncAuth();
+    const { data: authListener } = client.auth.onAuthStateChange((_event, nextSession) => {
+      setIsSignedIn(Boolean(nextSession));
+    });
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
   }, [todayKey]);
 
   useEffect(() => {
@@ -492,7 +514,7 @@ export default function PulsePage() {
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <AccountTrigger onOpen={() => setAccountOpen(true)} />
+          <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
           <div className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
             Readiness Score: {readiness}%
           </div>
@@ -780,7 +802,11 @@ export default function PulsePage() {
         </div>
       </section>
 
-      <AccountModal open={accountOpen} onClose={() => setAccountOpen(false)} />
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onAuthChange={setIsSignedIn}
+      />
     </section>
   );
 }
