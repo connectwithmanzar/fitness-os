@@ -14,7 +14,7 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-md border-t border-neutral-800 bg-neutral-900/90 backdrop-blur-md">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-md border-t border-neutral-800 bg-neutral-900/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
       <ul className="grid grid-cols-3">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
