@@ -87,20 +87,16 @@ export function InstallAppHint({ placement = "home" }: InstallAppHintProps) {
   };
 
   return (
-    <div
-      className={`rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 ${
-        placement === "home" ? "mt-4" : "mt-4"
-      }`}
-    >
+    <div className="mt-4 rounded-card border border-accent/20 bg-accent/10 p-3">
       <div className="flex items-start gap-3">
-        <Share className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+        <Share className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-emerald-200">Install Fitness OS</p>
-          <p className="mt-1 text-xs leading-5 text-emerald-100/80">{copy}</p>
+          <p className="text-sm font-semibold text-ink">Install Fitness OS</p>
+          <p className="mt-1 text-xs leading-5 text-mute">{copy}</p>
           {installEvent ? (
             <button
               type="button"
-              className="tap-target mt-3 inline-flex min-h-12 items-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black transition active:scale-95"
+              className="btn-primary mt-3 w-auto px-4"
               onClick={async () => {
                 await installEvent.prompt();
                 setInstallEvent(null);
@@ -115,7 +111,7 @@ export function InstallAppHint({ placement = "home" }: InstallAppHintProps) {
           <button
             type="button"
             onClick={dismiss}
-            className="tap-target flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-emerald-200/80 transition active:scale-95"
+            className="tap-target flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-mute transition active:scale-95"
             aria-label="Dismiss install hint"
           >
             <X className="h-5 w-5" />

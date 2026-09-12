@@ -1,9 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Loader2, Trash2, Utensils } from "lucide-react";
+import { ChevronDown, Loader2, Trash2 } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { AppBanner } from "@/components/ui/AppBanner";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Meter, meterTone } from "@/components/ui/Meter";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { parseMealScanResult } from "@/lib/diet-parse";
 import {
   createMealId,
@@ -262,39 +266,26 @@ export default function DietPage() {
   }
 
   return (
-    <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-36 text-neutral-50">
-      <header className="sticky top-0 z-40 -mx-4 mb-1 flex items-start justify-between gap-3 border-b border-neutral-800 bg-neutral-950/95 px-4 py-3 backdrop-blur-md">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
-            Module 2
-          </p>
-          <div className="mt-2 flex items-center gap-2">
-            <Utensils className="h-5 w-5 text-emerald-400" />
-            <h1 className="text-2xl font-semibold tracking-tight">Diet Engine</h1>
-          </div>
-          <p className="mt-2 text-sm text-neutral-400">
-            Text-only Indian meal logger. Katori, roti, plates, grams, and ml all work.
-          </p>
-        </div>
-        <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
-      </header>
+    <section className="mx-auto min-h-screen max-w-md bg-canvas px-5 pb-8 text-ink">
+      <PageHeader
+        kicker="Nutrition"
+        title="Eat"
+        subtitle="Log katori, roti, plates, grams, or ml."
+        action={<AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />}
+      />
 
-      {banner ? (
-        <div className="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2.5 text-sm font-medium text-emerald-300">
-          {banner}
-        </div>
-      ) : null}
+      {banner ? <AppBanner>{banner}</AppBanner> : null}
 
-      <div className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+      <section className="surface mt-5 p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
-              Daily Blueprint
+            <p className="eyebrow">Remaining</p>
+            <p className="mt-2 font-display text-4xl font-semibold tabular-nums tracking-tight">
+              {formatNumber(Math.max(0, targets.calories - totals.calories))}
+              <span className="ml-1 text-base font-medium text-faint">kcal</span>
             </p>
-            <p className="mt-1 text-sm text-neutral-300">
-              {formatNumber(targets.calories)} kcal • {formatNumber(targets.protein_g, 0)}P •{" "}
-              {formatNumber(targets.carbs_g, 0)}C • {formatNumber(targets.fats_g, 0)}F •{" "}
-              {formatNumber(targets.fiber_g, 0)}g fiber
+            <p className="mt-2 text-sm text-mute">
+              {formatNumber(Math.max(0, targets.protein_g - totals.protein_g), 0)}g protein left
             </p>
           </div>
           <button
@@ -303,9 +294,9 @@ export default function DietPage() {
               setDraftTargets(targets);
               setEditingTargets((open) => !open);
             }}
-            className="tap-target min-h-12 rounded-xl border border-neutral-800 px-3 text-sm font-semibold text-neutral-300 transition active:scale-95"
+            className="btn-ghost px-3"
           >
-            {editingTargets ? "Close" : "Edit"}
+            {editingTargets ? "Close" : "Targets"}
           </button>
         </div>
 
@@ -326,7 +317,7 @@ export default function DietPage() {
                 ["fiber_g", "Fiber"],
               ] as const
             ).map(([key, label]) => (
-              <label key={key} className="text-[11px] text-neutral-500">
+              <label key={key} className="text-[11px] text-faint">
                 {label}
                 <input
                   inputMode="decimal"
@@ -337,20 +328,17 @@ export default function DietPage() {
                       [key]: Number(event.target.value) || 0,
                     }))
                   }
-                  className="mt-1 min-h-12 w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 text-base text-white outline-none focus:border-emerald-500"
+                  className="input-field mt-1"
                 />
               </label>
             ))}
-            <button
-              type="submit"
-              className="tap-target col-span-2 mt-1 min-h-12 rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-black transition active:scale-95"
-            >
+            <button type="submit" className="btn-primary col-span-2 mt-1">
               Save targets
             </button>
           </form>
         ) : null}
 
-        <div className="mt-4 flex flex-col gap-3">
+        <div className="mt-5 flex flex-col gap-3">
           {(
             [
               { label: "Calories", consumed: totals.calories, target: targets.calories, unit: "kcal" },
@@ -361,31 +349,24 @@ export default function DietPage() {
             ] as const
           ).map((row) => {
             const percent = row.target > 0 ? Math.min(100, Math.round((row.consumed / row.target) * 100)) : 0;
-            const barTone =
-              percent >= 80 ? "bg-emerald-500" : percent >= 40 ? "bg-amber-400" : "bg-red-500";
             return (
               <div key={row.label}>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-neutral-300">{row.label}</span>
-                  <span className="font-mono text-neutral-400">
+                  <span className="text-mute">{row.label}</span>
+                  <span className="tabular-nums text-faint">
                     {formatNumber(row.consumed, row.unit === "kcal" ? 0 : 1)} /{" "}
-                    {formatNumber(row.target)} {row.unit} • {percent}%
+                    {formatNumber(row.target)} {row.unit}
                   </span>
                 </div>
-                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-neutral-800">
-                  <div
-                    className={`h-full rounded-full ${barTone}`}
-                    style={{ width: `${percent}%` }}
-                  />
-                </div>
+                <Meter value={percent} tone={meterTone(percent)} />
               </div>
             );
           })}
         </div>
-      </div>
+      </section>
 
-      <div className="mt-6 rounded-2xl border border-neutral-800 bg-neutral-900/70 p-4">
-        <label htmlFor="meal-query" className="text-sm font-medium text-neutral-200">
+      <section className="surface mt-4 p-4">
+        <label htmlFor="meal-query" className="font-display text-base font-semibold text-ink">
           What did you eat?
         </label>
         <textarea
@@ -394,7 +375,7 @@ export default function DietPage() {
           onChange={(event) => setQuery(event.target.value)}
           rows={4}
           placeholder="e.g., 250g paneer bhurji, 2 roti, and 1 katori dal or 300ml whole milk..."
-          className="mt-3 w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-3 text-base text-neutral-50 outline-none transition placeholder:text-neutral-600 focus:border-emerald-500"
+          className="input-field mt-3 resize-none py-3"
         />
 
         <div className="mt-3 flex flex-wrap gap-2">
@@ -403,7 +384,7 @@ export default function DietPage() {
               key={chip}
               type="button"
               onClick={() => setQuery((current) => appendShortcut(current, chip))}
-              className="tap-target min-h-12 rounded-full border border-neutral-700 bg-neutral-950 px-3 text-sm font-medium text-neutral-300 transition hover:border-emerald-500 hover:text-emerald-300 active:scale-95"
+              className="tap-target min-h-12 rounded-full border border-line bg-inset px-3 text-sm font-medium text-mute transition hover:border-accent/50 hover:text-accent active:scale-95"
             >
               {chip}
             </button>
@@ -416,7 +397,7 @@ export default function DietPage() {
             void logMeal();
           }}
           disabled={loading || query.trim().length === 0}
-          className="tap-target mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-neutral-950 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+          className="btn-primary mt-4"
         >
           {loading ? (
             <>
@@ -424,62 +405,51 @@ export default function DietPage() {
               Calculating nutritional values...
             </>
           ) : (
-            "Log Meal"
+            "Log meal"
           )}
         </button>
-        {error ? <p className="mt-3 text-xs text-amber-400">{error}</p> : null}
-      </div>
+        {error ? <p className="mt-3 text-xs text-warn">{error}</p> : null}
+      </section>
 
-      <section className="mt-7">
+      <section className="mt-6">
         <div className="flex items-end justify-between">
-          <h2 className="text-lg font-semibold">Today&apos;s meals</h2>
-          <p className="text-xs text-neutral-500">{logs.length} logged</p>
+          <div>
+            <p className="eyebrow">Log</p>
+            <h2 className="mt-2 font-display text-lg font-semibold">Today&apos;s meals</h2>
+          </div>
+          <p className="text-xs text-faint">{logs.length} logged</p>
         </div>
 
         <div className="mt-4 flex flex-col gap-3">
           {logs.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-neutral-800 px-4 py-10 text-center text-sm text-neutral-500">
-              No meals yet. Log a roti, katori, or gram-based plate to start the day.
-            </div>
+            <EmptyState
+              title="Nothing logged yet"
+              body="Log a roti, katori, or gram-based plate to start the day."
+            />
           ) : (
             logs.map((log: DietEntry & MealLog) => {
               const expanded = expandedId === log.id;
               const fiberG = fiberFromEntry(log);
               return (
-                <article
-                  key={log.id}
-                  className="rounded-xl border border-neutral-800 bg-neutral-900/80 p-4"
-                >
+                <article key={log.id} className="surface p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold text-neutral-50">
-                        {log.meal_name}
-                      </h3>
-                      <p className="mt-1 text-xs text-neutral-500">
-                        {log.serving_inferred}
-                      </p>
+                      <h3 className="text-sm font-semibold text-ink">{log.meal_name}</h3>
+                      <p className="mt-1 text-xs text-mute">{log.serving_inferred}</p>
                       {log.source ? (
-                        <span
-                          className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                            log.source === "gemini"
-                              ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                              : "border border-amber-400/30 bg-amber-400/10 text-amber-300"
-                          }`}
-                        >
+                        <span className={log.source === "gemini" ? "chip-accent mt-2" : "chip mt-2"}>
                           {log.source === "gemini" ? "Gemini" : "Estimate"}
                         </span>
                       ) : null}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300">
-                        {formatNumber(log.calories)} kcal
-                      </span>
+                      <span className="chip-accent">{formatNumber(log.calories)} kcal</span>
                       <button
                         type="button"
                         onClick={() => {
                           void removeLog(log.id);
                         }}
-                        className="tap-target rounded-lg p-3 text-neutral-500 transition hover:bg-neutral-800 hover:text-red-400 active:scale-95"
+                        className="tap-target rounded-lg p-3 text-faint transition hover:bg-inset hover:text-danger active:scale-95"
                         aria-label={`Delete ${log.meal_name}`}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -488,26 +458,16 @@ export default function DietPage() {
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <span className="rounded-full border border-neutral-800 px-2.5 py-1 text-neutral-300">
-                      P: {formatNumber(log.protein_g, 1)}g
-                    </span>
-                    <span className="rounded-full border border-neutral-800 px-2.5 py-1 text-neutral-300">
-                      C: {formatNumber(log.carbs_g, 1)}g
-                    </span>
-                    <span className="rounded-full border border-neutral-800 px-2.5 py-1 text-neutral-300">
-                      F: {formatNumber(log.fats_g, 1)}g
-                    </span>
-                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-emerald-300">
-                      Fiber: {formatNumber(fiberG, 0)}g
-                    </span>
+                    <span className="chip">P: {formatNumber(log.protein_g, 1)}g</span>
+                    <span className="chip">C: {formatNumber(log.carbs_g, 1)}g</span>
+                    <span className="chip">F: {formatNumber(log.fats_g, 1)}g</span>
+                    <span className="chip-accent">Fiber: {formatNumber(fiberG, 0)}g</span>
                   </div>
 
                   <button
                     type="button"
-                    onClick={() =>
-                      setExpandedId(expanded ? null : log.id)
-                    }
-                    className="mt-3 flex w-full items-center justify-between text-left text-xs font-medium text-neutral-400 transition hover:text-neutral-200 active:scale-95"
+                    onClick={() => setExpandedId(expanded ? null : log.id)}
+                    className="mt-3 flex w-full items-center justify-between text-left text-xs font-medium text-mute transition hover:text-ink active:scale-95"
                     aria-expanded={expanded}
                   >
                     Micronutrients
@@ -517,25 +477,15 @@ export default function DietPage() {
                   </button>
 
                   {expanded ? (
-                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-neutral-800 bg-neutral-950/70 p-3 text-xs text-neutral-300">
+                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-control bg-inset p-3 text-xs text-mute">
                       <p>Iron: {formatNumber(log.micronutrients.iron_mg, 1)} mg</p>
                       <p>Zinc: {formatNumber(log.micronutrients.zinc_mg, 1)} mg</p>
-                      <p>
-                        Magnesium: {formatNumber(log.micronutrients.magnesium_mg, 1)} mg
-                      </p>
-                      <p>
-                        Calcium: {formatNumber(log.micronutrients.calcium_mg, 1)} mg
-                      </p>
-                      <p>
-                        Vitamin D: {formatNumber(log.micronutrients.vitamin_d_iu, 1)} IU
-                      </p>
-                      <p>
-                        B12: {formatNumber(log.micronutrients.vitamin_b12_mcg, 2)} mcg
-                      </p>
+                      <p>Magnesium: {formatNumber(log.micronutrients.magnesium_mg, 1)} mg</p>
+                      <p>Calcium: {formatNumber(log.micronutrients.calcium_mg, 1)} mg</p>
+                      <p>Vitamin D: {formatNumber(log.micronutrients.vitamin_d_iu, 1)} IU</p>
+                      <p>B12: {formatNumber(log.micronutrients.vitamin_b12_mcg, 2)} mcg</p>
                       {log.breakdown_summary ? (
-                        <p className="col-span-2 text-neutral-500">
-                          {log.breakdown_summary}
-                        </p>
+                        <p className="col-span-2 text-faint">{log.breakdown_summary}</p>
                       ) : null}
                     </div>
                   ) : null}

@@ -1,0 +1,15 @@
+:root {
+  --bg: 11 11 12;
+  --bg-elevated: 20 20 22;
+  --bg-muted: 28 28 32;
+  --accent: 52 224 161;
+  --accent-fg: 6 33 22;
+  --ink: 243 243 241;
+  --mute: 154 154 148;
+  --faint: 106 106 102;
+  --danger: 240 113 103;
+  --warn: 232 197 71;
+  --radius-card: 1.125rem;
+  --radius-control: 0.9rem;
+  --shadow-float: 0 10px 40px rgb(0 0 0 / 0.48);
+}

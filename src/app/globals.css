@@ -1,15 +1,17 @@
+@import "../styles/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: rgb(var(--bg));
+  --foreground: rgb(var(--ink));
   color-scheme: dark;
 }
 
 html {
-  background: #0a0a0a;
+  background: rgb(var(--bg));
   color-scheme: dark;
 }
 
@@ -17,13 +19,12 @@ html,
 body {
   min-height: 100%;
   min-height: 100dvh;
-  background: #0a0a0a;
+  background: rgb(var(--bg));
   overscroll-behavior-y: none;
 }
 
 body {
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: rgb(var(--ink));
   -webkit-font-smoothing: antialiased;
 }
 
@@ -41,6 +42,50 @@ select,
     min-height: 48px;
     min-width: 48px;
     touch-action: manipulation;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.22em] text-faint;
+  }
+
+  .display-title {
+    @apply font-display text-[1.75rem] font-semibold leading-none tracking-tight text-ink;
+  }
+
+  .surface {
+    @apply rounded-card border border-white/[0.08] bg-raised;
+  }
+
+  .surface-muted {
+    @apply rounded-card border border-white/[0.08] bg-inset;
+  }
+
+  .btn-primary {
+    @apply tap-target inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control bg-accent px-4 text-sm font-semibold text-accent-fg transition active:scale-95 disabled:cursor-not-allowed disabled:bg-inset disabled:text-faint;
+  }
+
+  .btn-secondary {
+    @apply tap-target inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control border border-white/[0.08] bg-inset px-4 text-sm font-semibold text-ink transition active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply tap-target inline-flex min-h-12 items-center justify-center rounded-control px-3 text-sm font-medium text-mute transition active:scale-95 hover:text-ink;
+  }
+
+  .input-field {
+    @apply min-h-12 w-full rounded-control border border-white/[0.08] bg-canvas px-3 text-base text-ink outline-none placeholder:text-faint focus:border-accent focus:ring-2 focus:ring-accent/20;
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] font-medium text-mute;
+  }
+
+  .chip-accent {
+    @apply inline-flex items-center rounded-full border border-accent/25 bg-accent/10 px-2.5 py-1 text-[11px] font-semibold text-accent;
+  }
+
+  .os-dot {
+    @apply inline-block h-1.5 w-1.5 rounded-full bg-accent;
   }
 }
 

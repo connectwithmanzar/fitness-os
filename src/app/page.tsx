@@ -37,6 +37,9 @@ import { persistLastCompletedWorkout } from "@/lib/pulse-storage";
 import { notifyFitnessDataChanged } from "@/lib/fitness-events";
 import { InstallAppHint } from "@/components/InstallAppHint";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { AppBanner } from "@/components/ui/AppBanner";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 const STORAGE_KEY = "active_workout_session";
 const REST_PRESETS = [60, 90, 120] as const;
@@ -528,59 +531,40 @@ export default function WorkoutPage() {
   const canFinish = session ? validSetCount(session.exercises) > 0 : false;
 
   return (
-    <section className="mx-auto min-h-screen max-w-md overflow-x-hidden bg-neutral-950 px-4 pb-36 font-sans text-white">
-      <header className="sticky top-0 z-40 -mx-4 mb-1 flex items-start justify-between gap-3 border-b border-neutral-800 bg-neutral-950/95 px-4 py-3 backdrop-blur-md">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
-            {new Intl.DateTimeFormat("en-US", {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-            }).format(new Date())}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">Workout</h1>
+    <section className="mx-auto min-h-screen max-w-md overflow-x-hidden bg-canvas px-5 pb-8 font-sans text-ink">
+      <PageHeader
+        kicker={new Intl.DateTimeFormat("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        }).format(new Date())}
+        title={session ? sessionName(session) : "Train"}
+        subtitle={session ? "Log sets. Rest. Repeat." : "Pick a split or open a saved plan."}
+        action={
+          <>
+            <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
             {session ? (
-              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400">
-                {sessionName(session)}
-              </span>
+              <button
+                type="button"
+                disabled={!canFinish}
+                onClick={() => {
+                  void finishSession();
+                }}
+                className="btn-primary w-auto px-4 disabled:bg-inset disabled:text-faint"
+              >
+                Finish
+              </button>
             ) : null}
-          </div>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
-          {session ? (
-            <button
-              type="button"
-              disabled={!canFinish}
-              onClick={() => {
-                void finishSession();
-              }}
-              className="tap-target min-h-12 rounded-xl bg-emerald-500 px-4 py-3.5 text-sm font-semibold text-black transition active:scale-95 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500"
-            >
-              Finish Workout
-            </button>
-          ) : null}
-        </div>
-      </header>
-
-      <InstallAppHint />
-
-      {banner ? (
-        <div className="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2.5 text-sm font-medium text-emerald-300">
-          {banner}
-        </div>
-      ) : null}
-      {finishError ? <p className="mt-3 text-xs text-amber-400">{finishError}</p> : null}
+          </>
+        }
+      />
 
       {session ? (
-        <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-3">
+        <div className="sticky top-[4.75rem] z-30 -mx-5 mb-4 border-b border-line bg-raised/90 px-5 py-3 backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                Rest timer
-              </p>
-              <p className="mt-0.5 font-mono text-lg font-semibold text-white">
+              <p className="eyebrow">Rest</p>
+              <p className="mt-0.5 font-display text-2xl font-semibold tabular-nums text-ink">
                 {restRemaining === null
                   ? `${restSeconds}s`
                   : `${Math.floor(restRemaining / 60)}:${String(restRemaining % 60).padStart(2, "0")}`}
@@ -599,8 +583,8 @@ export default function WorkoutPage() {
                   }}
                   className={`tap-target min-h-12 min-w-12 rounded-full px-3 text-sm font-semibold transition active:scale-95 ${
                     restSeconds === preset
-                      ? "bg-emerald-500 text-black"
-                      : "border border-neutral-700 text-neutral-300"
+                      ? "bg-accent text-accent-fg"
+                      : "border border-line text-mute"
                   }`}
                 >
                   {preset}s
@@ -612,44 +596,46 @@ export default function WorkoutPage() {
             <button
               type="button"
               onClick={() => setRestRemaining(null)}
-              className="tap-target mt-2 min-h-12 rounded-xl border border-neutral-800 px-3 text-sm font-medium text-neutral-300 transition active:scale-95"
+              className="btn-secondary mt-2"
             >
               Skip rest
             </button>
           ) : (
-            <p className="mt-2 text-[11px] text-neutral-500">
+            <p className="mt-2 text-[11px] text-faint">
               Starts automatically when you complete a set.
             </p>
           )}
         </div>
-      ) : null}
+      ) : (
+        <InstallAppHint />
+      )}
 
-      <div className="mt-6">
+      {banner ? <AppBanner>{banner}</AppBanner> : null}
+      {finishError ? <p className="mt-3 text-xs text-warn">{finishError}</p> : null}
+
+      <div className={session ? "mt-2" : "mt-5"}>
         {!session ? (
           <div className="mb-8">
             {pendingPlan ? (
               <form
-                className="mb-6 rounded-2xl border border-emerald-500/40 bg-neutral-900 p-4"
+                className="mb-6 surface p-4"
                 onSubmit={(event) => {
                   event.preventDefault();
                   savePlan(splitName || pendingPlan.title, pendingPlan.exerciseIds);
                 }}
               >
-                <p className="text-sm font-semibold text-white">Save this as my plan</p>
-                <p className="mt-1 text-xs leading-5 text-neutral-500">
+                <p className="font-display text-base font-semibold text-ink">Save this as my plan</p>
+                <p className="mt-1 text-sm leading-5 text-mute">
                   Keep {pendingPlan.exerciseIds.length} lifts for next time. Stored on this phone.
                 </p>
                 <input
                   value={splitName}
                   onChange={(event) => setSplitName(event.target.value)}
                   placeholder={pendingPlan.title}
-                  className="mt-3 min-h-12 w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 text-base text-white outline-none focus:border-emerald-500"
+                  className="input-field mt-3"
                 />
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button
-                    type="submit"
-                    className="tap-target min-h-12 rounded-xl bg-emerald-500 text-sm font-semibold text-black transition active:scale-95"
-                  >
+                  <button type="submit" className="btn-primary">
                     Save plan
                   </button>
                   <button
@@ -658,7 +644,7 @@ export default function WorkoutPage() {
                       setPendingPlan(null);
                       setSplitName("");
                     }}
-                    className="tap-target min-h-12 rounded-xl border border-neutral-700 text-sm font-semibold text-neutral-300 transition active:scale-95"
+                    className="btn-secondary"
                   >
                     Not now
                   </button>
@@ -668,48 +654,43 @@ export default function WorkoutPage() {
 
             {customSplits.length > 0 ? (
               <section className="mb-8">
-                <h2 className="text-lg font-semibold">My plans</h2>
-                <p className="mt-1 text-sm text-neutral-500">
-                  Custom splits saved on this phone.
-                </p>
-                <div className="mt-3 space-y-3">
+                <p className="eyebrow">Library</p>
+                <h2 className="mt-2 font-display text-lg font-semibold">My plans</h2>
+                <p className="mt-1 text-sm text-mute">Custom splits saved on this phone.</p>
+                <div className="mt-4 space-y-3">
                   {customSplits.map((split) => (
                     <article
                       key={split.id}
-                      className={`rounded-2xl border bg-neutral-900 p-4 ${
-                        suggestedSplitId === split.id
-                          ? "border-emerald-500"
-                          : "border-neutral-800"
+                      className={`surface p-4 ${
+                        suggestedSplitId === split.id ? "border-accent" : ""
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-white">{split.title}</p>
-                          <p className="mt-1 text-xs leading-5 text-neutral-500">{split.detail}</p>
-                          <span className="mt-2 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
-                            Custom
-                          </span>
+                          <p className="text-sm font-semibold text-ink">{split.title}</p>
+                          <p className="mt-1 text-xs leading-5 text-mute">{split.detail}</p>
+                          <span className="chip-accent mt-2">Custom</span>
                         </div>
                       </div>
                       <div className="mt-3 grid grid-cols-3 gap-2">
                         <button
                           type="button"
                           onClick={() => startSplit(split)}
-                          className="tap-target min-h-12 rounded-xl bg-emerald-500 text-sm font-semibold text-black transition active:scale-95"
+                          className="btn-primary"
                         >
                           Start
                         </button>
                         <button
                           type="button"
                           onClick={() => renamePlan(split)}
-                          className="tap-target min-h-12 rounded-xl border border-neutral-700 text-sm font-semibold text-neutral-200 transition active:scale-95"
+                          className="btn-secondary"
                         >
                           Rename
                         </button>
                         <button
                           type="button"
                           onClick={() => removePlan(split)}
-                          className="tap-target min-h-12 rounded-xl border border-red-500/40 text-sm font-semibold text-red-300 transition active:scale-95"
+                          className="tap-target min-h-12 rounded-control border border-danger/40 text-sm font-semibold text-danger transition active:scale-95"
                         >
                           Delete
                         </button>
@@ -720,9 +701,10 @@ export default function WorkoutPage() {
               </section>
             ) : null}
 
-            <h2 className="text-lg font-semibold">Start a session</h2>
-            <p className="mt-1 text-sm text-neutral-500">
-              Pick a split to pre-load compounds, or start empty and add lifts yourself.
+            <p className="eyebrow">Start</p>
+            <h2 className="mt-2 font-display text-lg font-semibold">Choose a split</h2>
+            <p className="mt-1 text-sm text-mute">
+              Pre-load compounds, or start empty and add lifts yourself.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               {WORKOUT_SPLITS.map((split) => (
@@ -730,24 +712,22 @@ export default function WorkoutPage() {
                   key={split.id}
                   type="button"
                   onClick={() => startSplit(split)}
-                  className={`min-h-12 rounded-2xl border bg-neutral-900 p-4 text-left transition hover:border-emerald-500/50 active:scale-95 ${
-                    split.id === "empty" ? "col-span-2" : ""
-                  } ${
-                    suggestedSplitId === split.id
-                      ? "border-emerald-500"
-                      : "border-neutral-800"
-                  }`}
+                  className={`surface min-h-[7.5rem] p-4 text-left transition hover:border-accent/50 active:scale-95 ${
+                    split.id === "empty" ? "col-span-2 min-h-12" : ""
+                  } ${suggestedSplitId === split.id ? "border-accent" : ""}`}
                 >
-                  <p className="text-sm font-semibold text-white">{split.title}</p>
-                  <p className="mt-1 text-xs leading-5 text-neutral-500">{split.detail}</p>
+                  <span className="os-dot" aria-hidden="true" />
+                  <p className="mt-3 font-display text-base font-semibold text-ink">{split.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-mute">{split.detail}</p>
                 </button>
               ))}
             </div>
           </div>
         ) : session.exercises.length === 0 ? (
-          <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/90 p-4 text-center text-sm text-neutral-300">
-            No exercises yet. Tap below to add a movement.
-          </div>
+          <EmptyState
+            title="No lifts yet"
+            body="Tap below to add a movement and start logging."
+          />
         ) : (
           session.exercises.map((exercise) => {
             const muscle = resolveMuscle(exercise);
@@ -756,7 +736,7 @@ export default function WorkoutPage() {
             return (
             <article
               key={exercise.id}
-              className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4"
+              className="mb-3 surface p-3"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
@@ -768,18 +748,18 @@ export default function WorkoutPage() {
                     className="h-[52px] w-[52px] shrink-0 rounded-xl object-cover"
                   />
                   <div className="min-w-0">
-                    <h2 className="truncate text-base font-semibold text-white">{exercise.name}</h2>
+                    <h2 className="truncate text-base font-semibold text-ink">{exercise.name}</h2>
                     <div className="mt-1 flex flex-wrap gap-1.5">
-                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                      <span className="chip-accent">
                         {muscle}
                       </span>
                       {exercise.equipment || catalog?.equipment ? (
-                        <span className="rounded-full border border-neutral-800 px-2 py-0.5 text-[10px] font-medium text-neutral-400">
+                        <span className="chip">
                           {exercise.equipment ?? catalog?.equipment}
                         </span>
                       ) : null}
                       {hint ? (
-                        <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                        <span className="inline-flex items-center rounded-full border border-warn/30 bg-warn/10 px-2 py-0.5 text-[10px] font-semibold text-warn">
                           {hint}
                         </span>
                       ) : null}
@@ -798,29 +778,31 @@ export default function WorkoutPage() {
                         : current
                     )
                   }
-                  className="tap-target rounded-lg p-3 text-neutral-500 hover:text-red-400"
+                  className="tap-target rounded-lg p-3 text-faint hover:text-danger"
                   aria-label={`Remove ${exercise.name}`}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-              <div className="mt-4 grid grid-cols-[2rem_minmax(3.25rem,1fr)_1fr_1fr_3rem] gap-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+              <div className="mt-3 grid grid-cols-[1.75rem_minmax(3.25rem,1fr)_1fr_1fr_2.75rem] gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
                 <span className="text-center">Set</span>
-                <span className="text-center">Previous</span>
-                <span className="text-center">Weight</span>
+                <span className="text-center">Prev</span>
+                <span className="text-center">kg</span>
                 <span className="text-center">Reps</span>
                 <span />
               </div>
-              <div className="mt-2 flex flex-col gap-2">
+              <div className="mt-1.5 flex flex-col gap-1">
                 {exercise.sets.map((set, setIndex) => (
                   <div
                     key={set.id}
-                    className="grid grid-cols-[2rem_minmax(3.25rem,1fr)_1fr_1fr_3rem] items-center gap-2"
+                    className={`grid grid-cols-[1.75rem_minmax(3.25rem,1fr)_1fr_1fr_2.75rem] items-center gap-1.5 rounded-control px-0.5 ${
+                      set.completed ? "bg-accent/10" : ""
+                    }`}
                   >
-                    <span className="text-center font-mono text-sm text-neutral-400">
+                    <span className="text-center font-mono text-sm text-mute">
                       {set.setNumber}
                     </span>
-                    <span className="truncate text-center font-mono text-[11px] text-neutral-500">
+                    <span className="truncate text-center font-mono text-[11px] text-faint">
                       {previousForSet(exercise.name, setIndex, history)}
                     </span>
                     <input
@@ -849,7 +831,7 @@ export default function WorkoutPage() {
                             : current
                         )
                       }
-                      className="min-h-12 min-w-0 rounded-xl border border-neutral-800 bg-neutral-950 text-center font-mono text-base outline-none focus:border-emerald-500"
+                      className="input-field min-h-12 min-w-0 px-1 text-center font-mono"
                     />
                     <input
                       inputMode="numeric"
@@ -877,7 +859,7 @@ export default function WorkoutPage() {
                             : current
                         )
                       }
-                      className="min-h-12 min-w-0 rounded-xl border border-neutral-800 bg-neutral-950 text-center font-mono text-base outline-none focus:border-emerald-500"
+                      className="input-field min-h-12 min-w-0 px-1 text-center font-mono"
                     />
                     <button
                       type="button"
@@ -928,10 +910,10 @@ export default function WorkoutPage() {
                         );
                         setRestRemaining(restSeconds);
                       }}
-                      className={`tap-target flex h-12 w-12 items-center justify-center rounded-full border transition active:scale-95 ${
+                      className={`tap-target flex h-12 w-11 items-center justify-center rounded-full border transition active:scale-95 ${
                         set.completed
-                          ? "border-emerald-500 bg-emerald-500 text-black"
-                          : "border-neutral-700 text-neutral-500"
+                          ? "border-accent bg-accent text-accent-fg"
+                          : "border-line text-faint"
                       }`}
                       aria-label={`Mark ${exercise.name} set ${set.setNumber} complete`}
                     >
@@ -970,7 +952,7 @@ export default function WorkoutPage() {
                       : current
                   )
                 }
-                className="tap-target mt-3 flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-neutral-800 py-3.5 text-sm text-neutral-300 transition active:scale-95"
+                className="btn-ghost mt-2 w-full text-mute"
               >
                 <Plus className="h-4 w-4" />
                 Add Set
@@ -984,7 +966,7 @@ export default function WorkoutPage() {
           <>
             {session.exercises.length > 0 ? (
               <form
-                className="mb-3 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-3"
+                className="mb-3 surface p-3"
                 onSubmit={(event) => {
                   event.preventDefault();
                   savePlan(
@@ -993,19 +975,17 @@ export default function WorkoutPage() {
                   );
                 }}
               >
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                  Save this as my plan
-                </p>
+                <p className="eyebrow">Save this as my plan</p>
                 <div className="mt-2 flex gap-2">
                   <input
                     value={splitName}
                     onChange={(event) => setSplitName(event.target.value)}
                     placeholder="e.g. Heavy Push"
-                    className="min-h-12 min-w-0 flex-1 rounded-xl border border-neutral-800 bg-neutral-950 px-3 text-base text-white outline-none focus:border-emerald-500"
+                    className="input-field min-w-0 flex-1"
                   />
                   <button
                     type="submit"
-                    className="tap-target min-h-12 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black transition active:scale-95"
+                    className="btn-primary w-auto px-4"
                   >
                     Save
                   </button>
@@ -1015,7 +995,7 @@ export default function WorkoutPage() {
             <button
               type="button"
               onClick={() => setIsModalOpen(true)}
-              className="tap-target mb-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-700 bg-neutral-900/40 py-3.5 font-semibold text-neutral-300 transition hover:border-emerald-500 active:scale-95"
+              className="btn-secondary mb-3 border-dashed"
             >
               <Plus className="h-4 w-4" />
               + Add Exercise
@@ -1023,7 +1003,7 @@ export default function WorkoutPage() {
             <button
               type="button"
               onClick={cancelWorkout}
-              className="tap-target mb-10 min-h-12 w-full rounded-xl border border-neutral-800 text-sm font-medium text-neutral-400 transition active:scale-95 hover:border-red-400/40 hover:text-red-400"
+              className="btn-ghost mb-10 w-full text-faint hover:text-danger"
             >
               Cancel Workout
             </button>
@@ -1031,35 +1011,36 @@ export default function WorkoutPage() {
         ) : null}
       </div>
 
-      <section className="pb-6">
-        <h2 className="text-lg font-semibold">Past Workouts</h2>
+      <section className={session ? "hidden" : "pb-6"}>
+        <p className="eyebrow">History</p>
+        <h2 className="mt-2 font-display text-lg font-semibold">Past workouts</h2>
         {history.length === 0 ? (
-          <p className="mt-3 rounded-2xl border border-dashed border-neutral-800 px-4 py-8 text-center text-sm text-neutral-500">
-            No completed workouts yet. Finish a session above to see your history here.
-          </p>
+          <div className="mt-3">
+            <EmptyState
+              title="No sessions yet"
+              body="Finish a workout above and it will land here."
+            />
+          </div>
         ) : (
           <div className="mt-3 flex flex-col gap-3">
             {history.map((entry) => (
-              <article
-                key={entry.id}
-                className="rounded-2xl border border-neutral-800 bg-neutral-900/90 p-4"
-              >
+              <article key={entry.id} className="surface p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-faint">
                       {formatHistoryTimestamp(entry.completedAt)}
                     </p>
                     <h3 className="mt-1 text-sm font-semibold">{entry.name}</h3>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+                    <span className="chip-accent">
                       {completedSetCount(entry)} sets
                       {totalVolumeKg(entry) > 0 ? ` • ${Math.round(totalVolumeKg(entry))}kg` : ""}
                     </span>
                     <button
                       type="button"
                       onClick={() => setHistory(removeWorkoutHistory(entry.id))}
-                      className="tap-target p-3 text-neutral-500 hover:text-red-400"
+                      className="tap-target p-3 text-faint hover:text-danger"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -1067,10 +1048,7 @@ export default function WorkoutPage() {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {entry.exercises.map((exercise) => (
-                    <span
-                      key={exercise.id}
-                      className="rounded-full border border-neutral-800 px-2.5 py-1 text-[11px] text-neutral-300"
-                    >
+                    <span key={exercise.id} className="chip">
                       {exercise.name}: {topSetLabel(exercise)}
                     </span>
                   ))}

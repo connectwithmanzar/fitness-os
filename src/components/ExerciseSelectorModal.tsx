@@ -41,8 +41,8 @@ function PillRow<T extends string>({
             onClick={() => onChange(option)}
             className={`tap-target min-h-12 whitespace-nowrap rounded-full border px-4 text-sm font-semibold transition active:scale-95 ${
               active
-                ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
-                : "border-neutral-800 bg-neutral-900 text-neutral-400"
+                ? "border-accent bg-accent/12 text-accent"
+                : "border-line bg-raised text-mute"
             }`}
           >
             {option}
@@ -89,38 +89,39 @@ export function ExerciseSelectorModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center overflow-x-hidden bg-black/80 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[70] flex items-end justify-center overflow-x-hidden bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={resetAndClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="exercise-library-title"
-        className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border border-neutral-800 bg-neutral-950 pb-[env(safe-area-inset-bottom)] sm:rounded-3xl"
+        className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-line bg-raised pb-[env(safe-area-inset-bottom)] sm:rounded-card"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 pb-2 pt-4">
-          <h2 id="exercise-library-title" className="text-lg font-semibold text-white">
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/15 sm:hidden" />
+        <div className="flex items-center justify-between px-5 pb-2 pt-3">
+          <h2 id="exercise-library-title" className="font-display text-lg font-semibold text-ink">
             Exercise Library
           </h2>
           <button
             type="button"
             onClick={resetAndClose}
-            className="tap-target flex h-12 w-12 items-center justify-center rounded-full text-neutral-400"
+            className="tap-target flex h-12 w-12 items-center justify-center rounded-full text-mute"
             aria-label="Close exercise library"
           >
-            <X className="h-5 w-5 text-neutral-400" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
         <div className="space-y-3 px-5">
           <label className="relative block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search exercises..."
-              className="h-12 w-full rounded-xl border border-neutral-800 bg-neutral-900 pl-10 pr-3 text-base text-white outline-none focus:border-emerald-500"
+              className="input-field pl-10"
             />
           </label>
           <PillRow
@@ -137,10 +138,10 @@ export function ExerciseSelectorModal({
 
         <ul className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-5">
           {results.length === 0 ? (
-            <li className="py-10 text-center text-sm text-neutral-500">No matches. Try another filter.</li>
+            <li className="py-10 text-center text-sm text-mute">No matches. Try another filter.</li>
           ) : (
             results.map((exercise) => (
-              <li key={exercise.id} className="border-b border-neutral-900">
+              <li key={exercise.id} className="border-b border-line">
                 <button
                   type="button"
                   onClick={() => setDetail(exercise)}
@@ -154,12 +155,12 @@ export function ExerciseSelectorModal({
                     className="h-[52px] w-[52px] shrink-0 rounded-xl object-cover"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-white">{exercise.name}</p>
+                    <p className="truncate text-sm font-semibold text-ink">{exercise.name}</p>
                     <div className="mt-1 flex flex-wrap gap-1.5">
-                      <span className="rounded-full border border-neutral-800 px-2 py-0.5 text-[10px] font-medium text-neutral-400">
+                      <span className="chip">
                         {exercise.muscle}
                       </span>
-                      <span className="rounded-full border border-neutral-800 px-2 py-0.5 text-[10px] font-medium text-neutral-400">
+                      <span className="chip">
                         {exercise.equipment}
                       </span>
                     </div>
@@ -170,12 +171,12 @@ export function ExerciseSelectorModal({
           )}
         </ul>
 
-        <div className="flex gap-2 border-t border-neutral-800 px-5 py-4">
+        <div className="flex gap-2 border-t border-line px-5 py-4">
           <input
             value={customName}
             onChange={(event) => setCustomName(event.target.value)}
             placeholder="Custom movement"
-            className="min-h-12 min-w-0 flex-1 rounded-xl border border-neutral-800 bg-neutral-900 px-3 text-base text-white outline-none focus:border-emerald-500"
+            className="input-field min-w-0 flex-1"
           />
           <button
             type="button"
@@ -195,7 +196,7 @@ export function ExerciseSelectorModal({
                 defaultSets: 3,
               });
             }}
-            className="tap-target shrink-0 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black transition active:scale-95"
+            className="btn-primary w-auto shrink-0 px-4"
           >
             Add
           </button>
@@ -214,15 +215,15 @@ export function ExerciseSelectorModal({
             role="dialog"
             aria-modal="true"
             aria-labelledby="exercise-detail-title"
-            className="w-full max-w-md overflow-hidden rounded-t-3xl border border-neutral-800 bg-neutral-950 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-3xl"
+            className="w-full max-w-md overflow-hidden rounded-t-[1.75rem] border border-line bg-raised p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-card"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
-              <h3 id="exercise-detail-title" className="text-lg font-semibold text-white">
+              <h3 id="exercise-detail-title" className="font-display text-lg font-semibold text-ink">
                 {detail.name}
               </h3>
               <button type="button" onClick={() => setDetail(null)} aria-label="Close detail">
-                <X className="h-5 w-5 text-neutral-400" />
+                <X className="h-5 w-5 text-mute" />
               </button>
             </div>
             <ExerciseThumb
@@ -235,14 +236,14 @@ export function ExerciseSelectorModal({
               className="mt-4 h-52 w-full rounded-2xl object-contain"
             />
             <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300">
+              <span className="chip-accent">
                 {detail.muscle}
               </span>
-              <span className="rounded-full border border-neutral-800 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-300">
+              <span className="chip">
                 {detail.equipment}
               </span>
             </div>
-            <ul className="mt-4 list-disc space-y-1.5 pl-5 text-sm text-neutral-300">
+            <ul className="mt-4 list-disc space-y-1.5 pl-5 text-sm text-mute">
               {detail.instructions.slice(0, 3).map((cue) => (
                 <li key={cue}>{cue}</li>
               ))}
@@ -250,7 +251,7 @@ export function ExerciseSelectorModal({
             <button
               type="button"
               onClick={() => addExercise(detail)}
-              className="tap-target mt-5 min-h-12 w-full rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-black transition active:scale-95"
+              className="btn-primary mt-5"
             >
               Add to Routine
             </button>

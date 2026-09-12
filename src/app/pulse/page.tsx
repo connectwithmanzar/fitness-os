@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Check, ChevronDown, Moon } from "lucide-react";
+import { Activity, Check, ChevronDown, ChevronRight, Dumbbell, Moon, Utensils } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
+import { PageSkeleton } from "@/components/PageSkeleton";
+import { Meter, meterTone } from "@/components/ui/Meter";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   isSameLocalDay,
   loadLocalMealLogs,
@@ -27,7 +30,6 @@ import {
   type CompletedWorkout,
 } from "@/lib/workout-history";
 import { suggestNextSplit } from "@/lib/workout-splits";
-import { PageSkeleton } from "@/components/PageSkeleton";
 import { useReloadLocalFitnessData } from "@/hooks/useReloadLocalFitnessData";
 
 const BEDTIME_STORAGE_KEY = "pulse_bedtime_checks";
@@ -414,119 +416,67 @@ export default function PulsePage() {
   }
 
   return (
-    <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-36 font-sans text-white">
-      <header className="sticky top-0 z-40 -mx-4 mb-1 flex items-start justify-between gap-3 border-b border-neutral-800 bg-neutral-950/95 px-4 py-3 backdrop-blur-md">
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-neutral-500">
-            Module 3
-          </p>
-          <div className="mt-2 flex items-center gap-2">
-            <Activity className="h-5 w-5 text-emerald-400" />
-            <h1 className="text-2xl font-semibold tracking-tight">The Pulse</h1>
-          </div>
-          <p className="mt-2 text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
-            {formatDate(today)}
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
-          <div className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
-            Readiness Score: {readiness}%
-          </div>
-        </div>
-      </header>
+    <section className="mx-auto min-h-screen max-w-md bg-canvas px-5 pb-8 font-sans text-ink">
+      <PageHeader
+        kicker={formatDate(today)}
+        title="Today"
+        subtitle="Train, eat, recover."
+        action={<AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />}
+      />
 
-      <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
-        <h2 className="text-lg font-semibold">Today&apos;s Plan</h2>
-        <p className="mt-1 text-sm text-neutral-500">Train, eat, recover — that&apos;s the day.</p>
+      <section className="surface mt-5 overflow-hidden p-5">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="eyebrow">Readiness</p>
+            <p className="mt-2 font-display text-5xl font-semibold tabular-nums tracking-tight text-ink">
+              {readiness}
+              <span className="ml-1 text-lg font-medium text-faint">%</span>
+            </p>
+          </div>
+          <Activity className="h-6 w-6 text-accent" aria-hidden="true" />
+        </div>
+        <Meter value={readiness} tone={meterTone(readiness)} />
 
-        <article
-          className={`mt-4 rounded-2xl border p-4 ${
-            trainingCompleted
-              ? "border-emerald-500/40 bg-emerald-500/10"
-              : "border-neutral-800 bg-neutral-950/70"
-          }`}
-        >
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
-            Train
-          </p>
-          {trainingCompleted && latestWorkout ? (
-            <>
-              <h3 className="mt-1 text-base font-semibold text-white">Training done ✓</h3>
-              <p className="mt-1 text-sm text-neutral-300">
-                {latestWorkout.name} • {completedSetCount(latestWorkout)} sets
-              </p>
-            </>
-          ) : (
-            <>
-              <h3 className="mt-1 text-base font-semibold text-white">
-                Next: {suggestedSplit.title}
-              </h3>
-              <p className="mt-1 text-sm text-neutral-300">
-                {suggestedSplit.detail}. Or start empty if you want to pick lifts.
-              </p>
-            </>
-          )}
+        <div className="mt-5 divide-y divide-line">
           <Link
             href={trainingCompleted ? "/" : `/?suggest=${suggestedSplit.id}`}
-            className="tap-target mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-black transition active:scale-95"
+            className="tap-target flex min-h-12 items-center gap-3 py-3 first:pt-0"
           >
-            {trainingCompleted ? "Open Workout" : `Start ${suggestedSplit.title}`}
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/12 text-accent">
+              <Dumbbell className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-ink">
+                {trainingCompleted && latestWorkout ? "Training done" : `Train · ${suggestedSplit.title}`}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-mute">
+                {trainingCompleted && latestWorkout
+                  ? `${latestWorkout.name} • ${completedSetCount(latestWorkout)} sets`
+                  : suggestedSplit.detail}
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 text-faint" />
           </Link>
-        </article>
 
-        <article
-          className={`mt-3 rounded-2xl border p-4 ${
-            proteinDeficit
-              ? "border-red-500/40 bg-red-500/10"
-              : "border-neutral-800 bg-neutral-950/70"
-          }`}
-        >
-          <p
-            className={`text-[11px] font-semibold uppercase tracking-wide ${
-              proteinDeficit ? "text-red-300" : "text-emerald-300"
-            }`}
-          >
-            Eat
-          </p>
-          <h3 className="mt-1 text-base font-semibold text-white">
-            {proteinDeficit ? "Hit protein" : "Stay on your macros"}
-          </h3>
-          <p className="mt-1 text-sm text-neutral-300">
-            {formatAmount(gaps.calories)} kcal left • {formatAmount(gaps.protein_g, 1)}g protein left
-          </p>
-          <Link
-            href="/diet"
-            className="tap-target mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 py-3.5 text-sm font-semibold text-white transition active:scale-95"
-          >
-            Log food
+          <Link href="/diet" className="tap-target flex min-h-12 items-center gap-3 py-3">
+            <span
+              className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                proteinDeficit ? "bg-danger/15 text-danger" : "bg-accent/12 text-accent"
+              }`}
+            >
+              <Utensils className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-ink">
+                {proteinDeficit ? "Eat · Hit protein" : "Eat · On track"}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-mute">
+                {formatAmount(gaps.calories)} kcal left • {formatAmount(gaps.protein_g, 1)}g protein left
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 text-faint" />
           </Link>
-        </article>
 
-        <article
-          className={`mt-3 rounded-2xl border p-4 ${
-            recoverHighlight
-              ? "border-amber-400/40 bg-amber-400/10"
-              : "border-neutral-800 bg-neutral-950/70"
-          }`}
-        >
-          <p
-            className={`text-[11px] font-semibold uppercase tracking-wide ${
-              recoverHighlight ? "text-amber-300" : "text-emerald-300"
-            }`}
-          >
-            Recover
-          </p>
-          <h3 className="mt-1 text-base font-semibold text-white">
-            {uncheckedBedtime === 0
-              ? "Recovery stack done"
-              : `${uncheckedBedtime} bedtime check${uncheckedBedtime === 1 ? "" : "s"} left`}
-          </h3>
-          <p className="mt-1 text-sm text-neutral-300">
-            {recoverHighlight
-              ? "Training is done — take magnesium before bed."
-              : "Sleep, magnesium, and electrolytes protect tomorrow."}
-          </p>
           <button
             type="button"
             onClick={() => {
@@ -535,111 +485,125 @@ export default function PulsePage() {
                 block: "start",
               });
             }}
-            className="tap-target mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 py-3.5 text-sm font-semibold text-white transition active:scale-95"
+            className="tap-target flex min-h-12 w-full items-center gap-3 py-3 text-left"
           >
-            Open bedtime stack
+            <span
+              className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                recoverHighlight ? "bg-warn/15 text-warn" : "bg-accent/12 text-accent"
+              }`}
+            >
+              <Moon className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-ink">
+                {uncheckedBedtime === 0
+                  ? "Recover · Stack done"
+                  : `Recover · ${uncheckedBedtime} left`}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-mute">
+                {recoverHighlight
+                  ? "Training is done — take magnesium before bed."
+                  : "Sleep, magnesium, and electrolytes protect tomorrow."}
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 text-faint" />
           </button>
-        </article>
-      </section>
-
-      <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
-        <h2 className="text-sm font-semibold">Today&apos;s Macro Overview</h2>
-        <p className="mt-1 text-xs text-neutral-500">
-          DRI: {formatAmount(dietTargets.calories)} kcal • {formatAmount(dietTargets.protein_g)}g
-          Protein • {formatAmount(dietTargets.carbs_g)}g Carbs • {formatAmount(dietTargets.fats_g)}g
-          Fat • {formatAmount(dietTargets.fiber_g)}g Fiber
-        </p>
-        <div className="mt-4 flex flex-col gap-4">
-          {macros.map((macro) => {
-            const value = macro.percent;
-            const barTone =
-              value >= 80 ? "bg-emerald-500" : value >= 40 ? "bg-amber-400" : "bg-red-500";
-            return (
-              <div key={macro.label}>
-                <div className="flex items-center justify-between text-sm">
-                  <span>{macro.label}</span>
-                  <span className="font-mono text-xs text-neutral-400">
-                    {formatAmount(macro.consumed, macro.id === "calories" ? 0 : 1)} /{" "}
-                    {formatAmount(macro.target)} {macro.unit}
-                  </span>
-                </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-neutral-800">
-                  <div
-                    className={`h-full rounded-full transition-all ${barTone}`}
-                    style={{ width: `${value}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
         </div>
       </section>
 
-      <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
-        <h2 className="text-sm font-semibold">Smart Deficit &amp; Supplement Recommendation</h2>
-        <p className="mt-1 text-xs text-neutral-500">
-          Live gaps from today&apos;s local meal logs against DRI.
-        </p>
+      <section className="surface mt-4 p-4">
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="eyebrow">Nutrition</p>
+            <h2 className="mt-2 font-display text-lg font-semibold">Macros</h2>
+          </div>
+          <p className="text-[11px] text-faint">{formatAmount(dietTargets.calories)} kcal target</p>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          {macros.slice(0, 3).map((macro) => (
+            <div key={macro.label} className="rounded-control bg-inset px-3 py-3">
+              <p className="text-[11px] text-faint">{macro.label}</p>
+              <p className="mt-1 font-display text-lg font-semibold tabular-nums">
+                {formatAmount(macro.consumed, macro.id === "calories" ? 0 : 0)}
+              </p>
+              <Meter value={macro.percent} tone={meterTone(macro.percent)} />
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {macros.slice(3).map((macro) => (
+            <div key={macro.label} className="rounded-control bg-inset px-3 py-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-mute">{macro.label}</span>
+                <span className="tabular-nums text-faint">
+                  {formatAmount(macro.consumed, 1)} / {formatAmount(macro.target)}
+                </span>
+              </div>
+              <Meter value={macro.percent} tone={meterTone(macro.percent)} />
+            </div>
+          ))}
+        </div>
+      </section>
 
+      <section className="surface mt-4 p-4">
+        <p className="eyebrow">Coach</p>
+        <h2 className="mt-2 font-display text-lg font-semibold">Gaps</h2>
         {recommendations.length === 0 ? (
-          <p className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+          <p className="mt-3 text-sm text-mute">
             No critical fiber, protein, or magnesium gaps right now. Keep logging meals.
           </p>
         ) : (
-          <div className="mt-3 flex flex-col gap-3">
+          <div className="mt-3 flex flex-col gap-2">
             {recommendations.map((item) => (
               <article
                 key={item.id}
-                className={`rounded-xl border p-3 ${
+                className={`rounded-control px-3 py-3 ${
                   item.id === "protein"
-                    ? "border-red-500/40 bg-red-500/10"
+                    ? "bg-danger/10"
                     : item.id === "fiber"
-                      ? "border-amber-400/40 bg-amber-400/10"
-                      : "border-emerald-500/30 bg-emerald-500/10"
+                      ? "bg-warn/10"
+                      : "bg-accent/10"
                 }`}
               >
                 <p
                   className={`text-[11px] font-semibold uppercase tracking-wide ${
                     item.id === "protein"
-                      ? "text-red-300"
+                      ? "text-danger"
                       : item.id === "fiber"
-                        ? "text-amber-300"
-                        : "text-emerald-300"
+                        ? "text-warn"
+                        : "text-accent"
                   }`}
                 >
                   {item.badge}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-neutral-200">
-                  Suggestion: {item.suggestion}
-                </p>
+                <p className="mt-1 text-sm leading-5 text-ink">{item.suggestion}</p>
               </article>
             ))}
           </div>
         )}
-
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <p className="rounded-xl border border-neutral-800 bg-neutral-950/70 px-3 py-2">
-            Calories left: <span className="font-semibold">{formatAmount(gaps.calories)}</span>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-mute">
+          <p className="rounded-control bg-inset px-3 py-2">
+            Calories left <span className="font-semibold text-ink">{formatAmount(gaps.calories)}</span>
           </p>
-          <p className="rounded-xl border border-neutral-800 bg-neutral-950/70 px-3 py-2">
-            Protein left: <span className="font-semibold">{formatAmount(gaps.protein_g, 1)}g</span>
+          <p className="rounded-control bg-inset px-3 py-2">
+            Protein left <span className="font-semibold text-ink">{formatAmount(gaps.protein_g, 1)}g</span>
           </p>
-          <p className="rounded-xl border border-neutral-800 bg-neutral-950/70 px-3 py-2">
-            Carbs left: <span className="font-semibold">{formatAmount(gaps.carbs_g, 1)}g</span>
+          <p className="rounded-control bg-inset px-3 py-2">
+            Carbs left <span className="font-semibold text-ink">{formatAmount(gaps.carbs_g, 1)}g</span>
           </p>
-          <p className="rounded-xl border border-neutral-800 bg-neutral-950/70 px-3 py-2">
-            Fiber left: <span className="font-semibold">{formatAmount(gaps.fiber_g, 1)}g</span>
+          <p className="rounded-control bg-inset px-3 py-2">
+            Fiber left <span className="font-semibold text-ink">{formatAmount(gaps.fiber_g, 1)}g</span>
           </p>
         </div>
         {trainingCompleted ? (
-          <p className="mt-3 text-xs text-emerald-300">
+          <p className="mt-3 text-xs text-accent">
             {highIntensity ? "High-intensity session logged. " : "Training logged. "}
-            Magnesium Glycinate (400mg) and Electrolyte Hydration are Critical for Recovery.
+            Magnesium glycinate (400mg) and electrolytes are critical for recovery.
           </p>
         ) : null}
       </section>
 
-      <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
+      <section className="surface mt-4 p-4">
         <button
           type="button"
           onClick={() => setAuditOpen((open) => !open)}
@@ -647,52 +611,38 @@ export default function PulsePage() {
           aria-expanded={auditOpen}
         >
           <div>
-            <h2 className="text-sm font-semibold">Micronutrient Audit</h2>
-            <p className="mt-1 text-xs text-neutral-500">
-              Fiber, Iron, Calcium, Magnesium, Zinc vs DRI.
-            </p>
+            <p className="eyebrow">Details</p>
+            <h2 className="mt-2 font-display text-lg font-semibold">Micronutrient audit</h2>
           </div>
           <ChevronDown
-            className={`h-4 w-4 text-neutral-400 transition ${auditOpen ? "rotate-180" : ""}`}
+            className={`h-4 w-4 text-faint transition ${auditOpen ? "rotate-180" : ""}`}
           />
         </button>
         {auditOpen ? (
-          <div className="mt-4 flex flex-col gap-4">
-            {microAudit.map((marker) => {
-              const barTone = marker.deficient
-                ? "bg-red-500"
-                : marker.percent >= 80
-                  ? "bg-emerald-500"
-                  : "bg-amber-400";
-              return (
-                <div key={marker.id}>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-white">{marker.name}</span>
-                    <span className="font-mono text-xs text-neutral-400">
-                      {formatAmount(marker.consumed, 1)} / {formatAmount(marker.target)}{" "}
-                      {marker.unit} • {marker.percent}%
-                    </span>
-                  </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-neutral-800">
-                    <div
-                      className={`h-full rounded-full transition-all ${barTone}`}
-                      style={{ width: `${marker.percent}%` }}
-                    />
-                  </div>
+          <div className="mt-4 flex flex-col gap-3">
+            {microAudit.map((marker) => (
+              <div key={marker.id}>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-ink">{marker.name}</span>
+                  <span className="font-mono text-xs text-faint">
+                    {formatAmount(marker.consumed, 1)} / {formatAmount(marker.target)} {marker.unit}
+                  </span>
                 </div>
-              );
-            })}
+                <Meter
+                  value={marker.percent}
+                  tone={marker.deficient ? "low" : meterTone(marker.percent)}
+                />
+              </div>
+            ))}
           </div>
         ) : null}
       </section>
 
-      <section className="mb-5 mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
+      <section className="surface mb-4 mt-4 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold">7-Day Pulse</h2>
-            <p className="mt-1 text-xs text-neutral-500">
-              Training Volume &amp; Nutrition Consistency
-            </p>
+            <p className="eyebrow">Progress</p>
+            <h2 className="mt-2 font-display text-lg font-semibold">7-day pulse</h2>
           </div>
           <div className="flex flex-col items-end gap-2">
             <button
@@ -707,11 +657,11 @@ export default function PulsePage() {
                   setCopiedSummary(false);
                 }
               }}
-              className="tap-target min-h-12 rounded-full border border-neutral-700 px-3 text-sm font-semibold text-neutral-200 transition active:scale-95"
+              className="btn-ghost h-12 px-3 text-xs"
             >
-              {copiedSummary ? "Copied" : "Copy weekly summary"}
+              {copiedSummary ? "Copied" : "Copy week"}
             </button>
-            <svg viewBox="0 0 84 28" className="h-7 w-[84px] text-emerald-400" aria-hidden="true">
+            <svg viewBox="0 0 84 28" className="h-7 w-[84px] text-accent" aria-hidden="true">
               <polyline
                 fill="none"
                 stroke="currentColor"
@@ -725,9 +675,7 @@ export default function PulsePage() {
         </div>
 
         {!hasWeekActivity ? (
-          <p className="mt-3 text-xs text-neutral-500">
-            Log sessions to unlock 7-day trends
-          </p>
+          <p className="mt-3 text-xs text-faint">Log sessions to unlock 7-day trends</p>
         ) : null}
 
         <div className="mt-4 grid h-28 grid-cols-7 items-end gap-2">
@@ -751,18 +699,18 @@ export default function PulsePage() {
                 <div className="flex h-[88px] w-full items-end justify-center">
                   {day.workoutCompleted || !hasWeekActivity ? (
                     <div
-                      className={`w-4 rounded-t-md transition-all duration-300 ${
-                        hasWeekActivity ? "bg-emerald-500" : "bg-neutral-800"
+                      className={`w-3.5 rounded-t-md transition-all duration-300 ${
+                        hasWeekActivity ? "bg-accent" : "bg-inset"
                       } ${selected ? "opacity-100" : "opacity-80"}`}
                       style={{ height: `${relative}%` }}
                     />
                   ) : (
-                    <div className="h-1.5 w-4 rounded-full bg-neutral-800" />
+                    <div className="h-1.5 w-3.5 rounded-full bg-inset" />
                   )}
                 </div>
                 <span
                   className={`text-[10px] font-medium ${
-                    selected ? "text-emerald-300" : "text-neutral-500"
+                    selected ? "text-accent" : "text-faint"
                   }`}
                 >
                   {day.label}
@@ -773,93 +721,80 @@ export default function PulsePage() {
         </div>
 
         {selectedTrend ? (
-          <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+          <div className="mt-3 rounded-control bg-accent/10 px-3 py-2 text-xs text-accent">
             {selectedTrend.label}: {selectedTrend.setsCompleted} sets •{" "}
-            {formatAmount(selectedTrend.volumeKg)}kg • {formatAmount(selectedTrend.calories)}{" "}
-            kcal • {formatAmount(selectedTrend.protein_g, 1)}g protein
+            {formatAmount(selectedTrend.volumeKg)}kg • {formatAmount(selectedTrend.calories)} kcal •{" "}
+            {formatAmount(selectedTrend.protein_g, 1)}g protein
           </div>
         ) : (
-          <p className="mt-3 text-[11px] text-neutral-600">
-            Tap a day for volume and nutrition detail.
-          </p>
+          <p className="mt-3 text-[11px] text-faint">Tap a day for volume and nutrition detail.</p>
         )}
 
         <div className="mt-4 grid grid-cols-7 gap-2">
           {weekTrends.map((day) => (
             <div key={`${day.key}-dot`} className="flex justify-center">
               <span
-                className={`h-2.5 w-2.5 rounded-full ${
+                className={`h-2 w-2 rounded-full ${
                   day.proteinAdherence === "hit"
-                    ? "bg-emerald-500"
+                    ? "bg-accent"
                     : day.proteinAdherence === "partial"
-                      ? "bg-amber-400"
-                      : "bg-neutral-800"
+                      ? "bg-warn"
+                      : "bg-inset"
                 }`}
                 aria-label={`${day.label} protein ${day.proteinAdherence}`}
               />
             </div>
           ))}
         </div>
-        <p className="mt-2 text-center text-[10px] uppercase tracking-wide text-neutral-600">
+        <p className="mt-2 text-center text-[10px] uppercase tracking-wide text-faint">
           Protein adherence
         </p>
       </section>
 
-      <section
-        id="bedtime"
-        className="scroll-mt-24 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4"
-      >
+      <section id="bedtime" className="surface scroll-mt-24 p-4">
         <div className="flex items-center gap-2">
-          <Moon className="h-4 w-4 text-emerald-400" />
-          <h2 className="text-sm font-semibold">Bedtime Prescription</h2>
+          <Moon className="h-4 w-4 text-accent" />
+          <h2 className="font-display text-lg font-semibold">Bedtime</h2>
         </div>
-        <p className="mt-1 text-xs text-neutral-500">
-          Recovery stack tied to today&apos;s training and macros. Checking items lifts readiness.
+        <p className="mt-1 text-sm text-mute">
+          Recovery stack tied to today&apos;s training and macros.
         </p>
 
         {proteinDeficit ? (
-          <article className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-red-300">
-              Protein Deficit Detected
+          <article className="mt-4 rounded-control bg-danger/10 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">
+              Protein deficit
             </p>
-            <p className="mt-1 text-xs leading-5 text-red-100/90">
+            <p className="mt-1 text-sm leading-5 text-ink">
               You are at {formatAmount(totals.protein_g, 1)}g / {formatAmount(proteinTarget)}g (
-              {Math.round(proteinRatio * 100)}%). Take 1 Scoop Whey or 200g Greek Yogurt/Paneer.
+              {Math.round(proteinRatio * 100)}%). Take 1 scoop whey or 200g Greek yogurt/paneer.
             </p>
           </article>
         ) : null}
 
         {fiberDeficit ? (
-          <article className="mt-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">
-              Fiber Deficit
+          <article className="mt-3 rounded-control bg-warn/10 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-warn">
+              Fiber deficit
             </p>
-            <p className="mt-1 text-xs leading-5 text-amber-100/90">
-              {formatAmount(totals.fiber_g, 1)}g logged. Take 2 tbsp Isabgol / Chia Seeds before bed.
+            <p className="mt-1 text-sm leading-5 text-ink">
+              {formatAmount(totals.fiber_g, 1)}g logged. Take 2 tbsp isabgol / chia seeds before bed.
             </p>
           </article>
         ) : null}
-        <div className="mt-4 flex flex-col gap-3">
+        <div className="mt-4 flex flex-col gap-2">
           {BEDTIME_ITEMS.map((item) => {
             const isChecked = checked.includes(item.id);
             return (
-              <article
-                key={item.id}
-                className={`rounded-xl border p-3 ${
-                  (item.id === "magnesium" && recoveryFlags.magnesium) ||
-                  (item.id === "electrolytes" && recoveryFlags.electrolytes)
-                    ? "border-amber-400/40 bg-amber-400/5"
-                    : "border-neutral-800 bg-neutral-950/60"
-                }`}
-              >
+              <article key={item.id} className="rounded-control bg-inset p-3">
                 <div className="flex items-start gap-3">
                   <button
                     type="button"
                     onClick={() => toggleCheck(item.id)}
-                    className={`tap-target mt-0.5 flex h-12 w-12 items-center justify-center rounded-xl border transition active:scale-95 ${
+                    className={`tap-target mt-0.5 flex h-12 w-12 items-center justify-center rounded-control border transition active:scale-95 ${
                       isChecked
-                        ? "border-emerald-500 bg-emerald-500 text-black"
-                        : "border-neutral-700 bg-neutral-950 text-transparent"
+                        ? "border-accent bg-accent text-accent-fg"
+                        : "border-line bg-canvas text-transparent"
                     }`}
                     aria-pressed={isChecked}
                     aria-label={`Mark ${item.title} complete`}
@@ -870,23 +805,23 @@ export default function PulsePage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h3
                         className={`text-sm font-semibold ${
-                          isChecked ? "text-neutral-400 line-through" : "text-white"
+                          isChecked ? "text-mute line-through" : "text-ink"
                         }`}
                       >
                         {item.title}
                       </h3>
                       {item.id === "magnesium" && trainingCompleted ? (
-                        <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300">
-                          CRITICAL: Muscle Repair &amp; CNS Recovery Active
+                        <span className="inline-flex rounded-full bg-danger/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-danger">
+                          Critical
                         </span>
                       ) : (item.id === "magnesium" && recoveryFlags.magnesium) ||
                         (item.id === "electrolytes" && recoveryFlags.electrolytes) ? (
-                        <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+                        <span className="inline-flex rounded-full bg-warn/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warn">
                           {isChecked ? "Stacked" : "Recommended"}
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-xs text-neutral-500">{item.detail}</p>
+                    <p className="mt-1 text-xs text-mute">{item.detail}</p>
                   </div>
                 </div>
               </article>

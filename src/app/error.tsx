@@ -7,13 +7,12 @@ export default function Error({
   reset: () => void;
 }) {
   return (
-    <div className="flex min-h-[70dvh] flex-col items-center justify-center gap-4 bg-neutral-950 px-6 text-center">
-      <p className="text-sm font-medium text-neutral-200">
-        Something went wrong — Reload
-      </p>
+    <div className="flex min-h-[70dvh] flex-col items-center justify-center gap-4 bg-canvas px-6 text-center">
+      <span className="os-dot" aria-hidden="true" />
+      <p className="font-display text-lg font-semibold text-ink">Something went wrong</p>
       <button
         type="button"
-        className="tap-target min-h-12 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-black transition active:scale-95"
+        className="btn-primary max-w-48"
         onClick={() => reset()}
       >
         Reload

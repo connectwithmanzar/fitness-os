@@ -26,14 +26,14 @@ export function AccountButton({
     <button
       type="button"
       onClick={onClick}
-      className="tap-target relative flex min-h-12 items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900/80 px-3.5 text-sm font-semibold text-white transition hover:border-emerald-500 active:scale-95"
+      className="tap-target relative flex min-h-12 items-center gap-1.5 rounded-full border border-line bg-raised px-3.5 text-sm font-semibold text-ink transition hover:border-accent/50 active:scale-95"
       aria-label="Open account"
     >
       <User className="h-3.5 w-3.5" />
       Account
       <span
         className={`h-2 w-2 rounded-full ${
-          signedIn ? "bg-emerald-400" : "bg-neutral-600"
+          signedIn ? "bg-accent" : "bg-faint"
         }`}
         aria-hidden="true"
       />
@@ -155,24 +155,25 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="auth-title"
-        className="w-full max-w-md rounded-t-3xl border border-neutral-800 bg-neutral-950 p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl"
+        className="w-full max-w-md rounded-t-[1.75rem] border border-line bg-raised p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-float sm:rounded-card"
         onClick={(event) => event.stopPropagation()}
       >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/15 sm:hidden" />
         <div className="mb-4 flex items-center justify-between">
-          <h2 id="auth-title" className="text-lg font-semibold text-white">
-            Account & Cloud Sync
+          <h2 id="auth-title" className="font-display text-lg font-semibold text-ink">
+            Account
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-neutral-400 transition hover:text-white active:scale-98"
+            className="tap-target flex h-12 w-12 items-center justify-center rounded-full text-mute transition hover:text-ink active:scale-98"
             aria-label="Close account"
           >
             <X className="h-5 w-5" />
@@ -181,11 +182,11 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
 
         {userEmail ? (
           <div>
-            <p className="text-sm text-neutral-400">Signed in as</p>
-            <p className="mt-1 text-sm font-semibold text-white">{userEmail}</p>
-            <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
-              Cloud Sync Active
+            <p className="text-sm text-mute">Signed in as</p>
+            <p className="mt-1 text-sm font-semibold text-ink">{userEmail}</p>
+            <p className="chip-accent mt-3">
+              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+              Cloud sync on
             </p>
             <button
               type="button"
@@ -193,7 +194,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
                 void signOut();
               }}
               disabled={busy}
-              className="tap-target mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-neutral-700 py-3.5 text-sm font-semibold text-white transition active:scale-95 disabled:opacity-60"
+              className="btn-secondary mt-5 disabled:opacity-60"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Sign Out
@@ -205,10 +206,10 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => setTab("signin")}
-                className={`tap-target min-h-12 rounded-xl py-3 text-sm font-semibold transition active:scale-95 ${
+                className={`tap-target min-h-12 rounded-control py-3 text-sm font-semibold transition active:scale-95 ${
                   tab === "signin"
-                    ? "bg-emerald-500 text-black"
-                    : "border border-neutral-800 bg-neutral-900 text-neutral-300"
+                    ? "bg-accent text-accent-fg"
+                    : "border border-line bg-inset text-mute"
                 }`}
               >
                 Sign In
@@ -216,10 +217,10 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => setTab("signup")}
-                className={`tap-target min-h-12 rounded-xl py-3 text-sm font-semibold transition active:scale-95 ${
+                className={`tap-target min-h-12 rounded-control py-3 text-sm font-semibold transition active:scale-95 ${
                   tab === "signup"
-                    ? "bg-emerald-500 text-black"
-                    : "border border-neutral-800 bg-neutral-900 text-neutral-300"
+                    ? "bg-accent text-accent-fg"
+                    : "border border-line bg-inset text-mute"
                 }`}
               >
                 Create Account
@@ -239,7 +240,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="Email"
-                className="min-h-12 rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-base text-white outline-none focus:border-emerald-500"
+                className="input-field"
               />
               <input
                 type="password"
@@ -248,14 +249,14 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Password"
-                className="min-h-12 rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-base text-white outline-none focus:border-emerald-500"
+                className="input-field"
               />
               <button
                 type="submit"
                 disabled={busy}
-                className="tap-target flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-black transition active:scale-95 disabled:opacity-70"
+                className="btn-primary disabled:opacity-70"
               >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin text-black" /> : null}
+                {busy ? <Loader2 className="h-4 w-4 animate-spin text-accent-fg" /> : null}
                 {tab === "signin" ? "Sign In" : "Create Account"}
               </button>
             </form>
@@ -263,16 +264,14 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
         )}
 
         {error ? (
-          <p className="mt-3 text-sm font-medium text-amber-300">{error}</p>
+          <p className="mt-3 text-sm font-medium text-warn">{error}</p>
         ) : null}
 
         <InstallAppHint placement="account" />
 
-        <div className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/70 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-            Local backup
-          </p>
-          <p className="mt-1 text-xs text-neutral-400">
+        <div className="mt-5 surface-muted p-3">
+          <p className="eyebrow">Local backup</p>
+          <p className="mt-1 text-xs text-mute">
             Export or merge meals, workouts, targets, and splits. No cloud required.
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -282,14 +281,14 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
                 downloadBackup();
                 setBackupNote("Backup downloaded.");
               }}
-              className="tap-target min-h-12 rounded-xl border border-neutral-700 py-3 text-sm font-semibold text-white transition active:scale-95"
+              className="btn-secondary"
             >
               Export JSON
             </button>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="tap-target min-h-12 rounded-xl border border-neutral-700 py-3 text-sm font-semibold text-white transition active:scale-95"
+              className="btn-secondary"
             >
               Import JSON
             </button>
@@ -329,7 +328,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
             }}
           />
           {backupNote ? (
-            <p className="mt-2 text-xs text-emerald-300">{backupNote}</p>
+            <p className="mt-2 text-xs text-accent">{backupNote}</p>
           ) : null}
         </div>
 
@@ -339,7 +338,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
             setGuestMode(true);
             onClose();
           }}
-          className="mt-4 w-full text-center text-sm text-neutral-400 underline-offset-4 hover:text-neutral-200 hover:underline"
+          className="mt-4 w-full text-center text-sm text-mute underline-offset-4 hover:text-ink hover:underline"
         >
           Continue as Guest
         </button>

@@ -1,10 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Outfit } from "next/font/google";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNav } from "@/components/layout/BottomNav";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-body",
+});
+
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-display",
+});
 
 export const metadata: Metadata = {
   title: "Fitness OS",
@@ -30,7 +38,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: "#0B0B0C",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -47,13 +55,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className="dark bg-neutral-950 text-neutral-50 selection:bg-emerald-500 selection:text-black"
+      className={`${inter.variable} ${outfit.variable} dark bg-canvas text-ink selection:bg-accent selection:text-accent-fg`}
     >
       <body
-        className={`${inter.className} min-h-dvh bg-neutral-950 pt-[env(safe-area-inset-top)] text-neutral-50`}
+        className={`${inter.className} min-h-dvh bg-canvas pt-[env(safe-area-inset-top)] font-sans text-ink`}
       >
         <ErrorBoundary>
-          <main className="relative z-0 mx-auto min-h-dvh max-w-md overflow-y-auto scroll-smooth bg-neutral-950 pb-[calc(9rem+env(safe-area-inset-bottom))] text-neutral-50 sm:border-x sm:border-neutral-800 sm:shadow-2xl">
+          <main className="relative z-0 mx-auto min-h-dvh max-w-md overflow-y-auto scroll-smooth bg-canvas pb-[calc(7.5rem+env(safe-area-inset-bottom))] text-ink">
             {children}
           </main>
         </ErrorBoundary>
