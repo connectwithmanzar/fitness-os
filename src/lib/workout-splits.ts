@@ -1,4 +1,4 @@
-import { findExerciseById, type LibraryExercise } from "@/lib/exerciseDatabase";
+import { findExerciseById, findExerciseByName, type LibraryExercise } from "@/lib/exerciseDatabase";
 
 export type WorkoutSplitId =
   | "push"
@@ -7,14 +7,18 @@ export type WorkoutSplitId =
   | "upper"
   | "lower"
   | "full"
-  | "empty";
+  | "empty"
+  | string;
 
 export type WorkoutSplit = {
-  id: WorkoutSplitId;
+  id: string;
   title: string;
   detail: string;
   exerciseIds: string[];
+  custom?: boolean;
 };
+
+export const CUSTOM_SPLITS_KEY = "custom_workout_splits";
 
 export const WORKOUT_SPLITS: WorkoutSplit[] = [
   {
@@ -61,8 +65,77 @@ export const WORKOUT_SPLITS: WorkoutSplit[] = [
   },
 ];
 
+function stubExercise(name: string): LibraryExercise {
+  return {
+    id: name.trim().toLowerCase().replace(/\s+/g, "-"),
+    name,
+    muscle: "Core",
+    equipment: "Bodyweight",
+    gifUrl: "",
+    stillUrl: "",
+    instructions: [],
+    defaultSets: 3,
+  };
+}
+
+function isWorkoutSplit(value: unknown): value is WorkoutSplit {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as WorkoutSplit;
+  return (
+    typeof record.id === "string" &&
+    typeof record.title === "string" &&
+    Array.isArray(record.exerciseIds) &&
+    record.exerciseIds.every((id) => typeof id === "string")
+  );
+}
+
+export function loadCustomSplits(): WorkoutSplit[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_SPLITS_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter(isWorkoutSplit).map((split) => ({ ...split, custom: true }));
+  } catch {
+    return [];
+  }
+}
+
+export function persistCustomSplits(splits: WorkoutSplit[]): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(CUSTOM_SPLITS_KEY, JSON.stringify(splits));
+}
+
+export function saveCustomSplit(split: WorkoutSplit): WorkoutSplit[] {
+  const next = [
+    { ...split, custom: true as const },
+    ...loadCustomSplits().filter((item) => item.id !== split.id),
+  ];
+  persistCustomSplits(next);
+  return next;
+}
+
+export function allWorkoutSplits(custom: WorkoutSplit[] = loadCustomSplits()): WorkoutSplit[] {
+  return [...custom, ...WORKOUT_SPLITS];
+}
+
 export function exercisesForSplit(split: WorkoutSplit): LibraryExercise[] {
-  return split.exerciseIds
-    .map(findExerciseById)
-    .filter((exercise): exercise is LibraryExercise => exercise !== undefined);
+  return split.exerciseIds.map((id) => {
+    return (
+      findExerciseById(id) ??
+      findExerciseByName(id) ??
+      stubExercise(id)
+    );
+  });
 }

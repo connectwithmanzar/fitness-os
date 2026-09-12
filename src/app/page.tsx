@@ -12,8 +12,10 @@ import {
 } from "@/lib/exerciseDatabase";
 import { getSupabase } from "@/lib/supabaseClient";
 import {
+  allWorkoutSplits,
   exercisesForSplit,
-  WORKOUT_SPLITS,
+  loadCustomSplits,
+  saveCustomSplit,
   type WorkoutSplit,
 } from "@/lib/workout-splits";
 import {
@@ -210,6 +212,45 @@ function previousForSet(
   return "—";
 }
 
+function overloadHint(
+  exerciseName: string,
+  history: CompletedWorkout[]
+): string | null {
+  const sessions = history
+    .filter((workout) =>
+      workout.exercises.some((exercise) => exercise.name === exerciseName)
+    )
+    .slice(0, 2);
+  if (sessions.length < 2) {
+    return null;
+  }
+
+  const older = sessions[1];
+  const olderExercise = older.exercises.find((exercise) => exercise.name === exerciseName);
+  const olderCompleted = olderExercise?.sets.filter((set) => set.completed) ?? [];
+  const targets = olderCompleted
+    .map((set) => Number(set.reps))
+    .filter((reps) => Number.isFinite(reps) && reps > 0);
+  if (targets.length === 0) {
+    return null;
+  }
+  const targetReps = Math.min(...targets);
+
+  const hitAll = sessions.every((workout) => {
+    const exercise = workout.exercises.find((item) => item.name === exerciseName);
+    const completed = exercise?.sets.filter((set) => set.completed) ?? [];
+    return (
+      completed.length >= olderCompleted.length &&
+      completed.every((set) => {
+        const reps = Number(set.reps);
+        return Number.isFinite(reps) && reps >= targetReps;
+      })
+    );
+  });
+
+  return hitAll ? "+2.5 kg next time" : null;
+}
+
 function beepRestEnd(): void {
   try {
     const Ctx =
@@ -251,6 +292,8 @@ export default function WorkoutPage() {
   const [hydrated, setHydrated] = useState(false);
   const [restSeconds, setRestSeconds] = useState<(typeof REST_PRESETS)[number]>(90);
   const [restRemaining, setRestRemaining] = useState<number | null>(null);
+  const [customSplits, setCustomSplits] = useState<WorkoutSplit[]>([]);
+  const [splitName, setSplitName] = useState("");
 
   useEffect(() => {
     try {
@@ -265,6 +308,7 @@ export default function WorkoutPage() {
       setSession(null);
     }
     setHistory(loadWorkoutHistory());
+    setCustomSplits(loadCustomSplits());
     setHydrated(true);
 
     const client = getSupabase();
@@ -503,7 +547,7 @@ export default function WorkoutPage() {
               Pick a split to pre-load compounds, or start empty and add lifts yourself.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
-              {WORKOUT_SPLITS.map((split) => (
+              {allWorkoutSplits(customSplits).map((split) => (
                 <button
                   key={split.id}
                   type="button"
@@ -514,6 +558,11 @@ export default function WorkoutPage() {
                 >
                   <p className="text-sm font-semibold text-white">{split.title}</p>
                   <p className="mt-1 text-xs leading-5 text-neutral-500">{split.detail}</p>
+                  {split.custom ? (
+                    <span className="mt-2 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+                      Custom
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -526,6 +575,7 @@ export default function WorkoutPage() {
           session.exercises.map((exercise) => {
             const muscle = resolveMuscle(exercise);
             const catalog = findExerciseByName(exercise.name);
+            const hint = overloadHint(exercise.name, history);
             return (
             <article
               key={exercise.id}
@@ -549,6 +599,11 @@ export default function WorkoutPage() {
                       {exercise.equipment || catalog?.equipment ? (
                         <span className="rounded-full border border-neutral-800 px-2 py-0.5 text-[10px] font-medium text-neutral-400">
                           {exercise.equipment ?? catalog?.equipment}
+                        </span>
+                      ) : null}
+                      {hint ? (
+                        <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                          {hint}
                         </span>
                       ) : null}
                     </div>
@@ -750,6 +805,47 @@ export default function WorkoutPage() {
 
         {session ? (
           <>
+            {session.exercises.length > 0 ? (
+              <form
+                className="mb-3 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const title = splitName.trim() || sessionName(session);
+                  setCustomSplits(
+                    saveCustomSplit({
+                      id: createId(),
+                      title,
+                      detail: `${session.exercises.length} lifts`,
+                      exerciseIds: session.exercises.map(
+                        (exercise) =>
+                          findExerciseByName(exercise.name)?.id ?? exercise.name
+                      ),
+                      custom: true,
+                    })
+                  );
+                  setSplitName("");
+                  setBanner("Split saved locally");
+                }}
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                  Save as custom split
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={splitName}
+                    onChange={(event) => setSplitName(event.target.value)}
+                    placeholder="e.g. Heavy Push"
+                    className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-800 bg-neutral-950 px-3 text-sm text-white outline-none focus:border-emerald-500"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-emerald-500 px-3 text-xs font-semibold text-black"
+                  >
+                    Save
+                  </button>
+                </div>
+              </form>
+            ) : null}
             <button
               type="button"
               onClick={() => setIsModalOpen(true)}

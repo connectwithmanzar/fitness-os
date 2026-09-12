@@ -303,6 +303,186 @@ export function estimateIndianMeal(query: string): MealScanResult {
     parts.push("1 katori sabzi");
   }
 
+  const idliCount = matchCount(source, /(\d+(?:\.\d+)?)\s*(?:idli|idlis)\b/) || (/idli/.test(source) ? 2 : 0);
+  if (idliCount > 0) {
+    totals = add(totals, scale({
+      calories: 70,
+      protein_g: 2,
+      carbs_g: 13,
+      fats_g: 0.4,
+      fiber_g: 1.2,
+      iron_mg: 0.6,
+      zinc_mg: 0.3,
+      magnesium_mg: 12,
+      vitamin_d_iu: 0,
+      calcium_mg: 18,
+      vitamin_b12_mcg: 0,
+    }, idliCount));
+    parts.push(`${idliCount} idli`);
+  }
+
+  const dosaCount = matchCount(source, /(\d+(?:\.\d+)?)\s*(?:dosa|dosas|masala dosa)\b/) || (/\bdosa\b/.test(source) ? 1 : 0);
+  if (dosaCount > 0) {
+    totals = add(totals, scale({
+      calories: 180,
+      protein_g: 4.5,
+      carbs_g: 28,
+      fats_g: 5.5,
+      fiber_g: 2.2,
+      iron_mg: 1.1,
+      zinc_mg: 0.6,
+      magnesium_mg: 28,
+      vitamin_d_iu: 0,
+      calcium_mg: 22,
+      vitamin_b12_mcg: 0,
+    }, dosaCount));
+    parts.push(`${dosaCount} dosa`);
+  }
+
+  if (/\bpoha\b/.test(source)) {
+    const pohaPlates = matchCount(source, /(\d+(?:\.\d+)?)\s*(?:plate|plates|bowl|bowls|katori)\s*(?:of\s+)?poha/) || 1;
+    totals = add(totals, scale({
+      calories: 250,
+      protein_g: 5,
+      carbs_g: 42,
+      fats_g: 7,
+      fiber_g: 3.5,
+      iron_mg: 2.8,
+      zinc_mg: 0.7,
+      magnesium_mg: 36,
+      vitamin_d_iu: 0,
+      calcium_mg: 20,
+      vitamin_b12_mcg: 0,
+    }, pohaPlates));
+    parts.push(`${pohaPlates} plate poha`);
+  }
+
+  if (/\bupma\b/.test(source)) {
+    const upmaBowls = matchCount(source, /(\d+(?:\.\d+)?)\s*(?:plate|plates|bowl|bowls|katori)\s*(?:of\s+)?upma/) || 1;
+    totals = add(totals, scale({
+      calories: 220,
+      protein_g: 5,
+      carbs_g: 34,
+      fats_g: 7,
+      fiber_g: 3,
+      iron_mg: 1.4,
+      zinc_mg: 0.6,
+      magnesium_mg: 30,
+      vitamin_d_iu: 0,
+      calcium_mg: 24,
+      vitamin_b12_mcg: 0,
+    }, upmaBowls));
+    parts.push(`${upmaBowls} bowl upma`);
+  }
+
+  if (/\brajma\b/.test(source)) {
+    const rajma = matchCount(source, /(\d+(?:\.\d+)?)\s*(?:katori|katoris|bowl|bowls)\s*(?:of\s+)?rajma/) || 1;
+    totals = add(totals, scale({
+      calories: 210,
+      protein_g: 12,
+      carbs_g: 28,
+      fats_g: 5,
+      fiber_g: 8,
+      iron_mg: 3.2,
+      zinc_mg: 1.4,
+      magnesium_mg: 55,
+      vitamin_d_iu: 0,
+      calcium_mg: 50,
+      vitamin_b12_mcg: 0,
+    }, rajma));
+    parts.push(`${rajma} katori rajma`);
+  }
+
+  if (/\bchole\b|\bchana masala\b|\bchole bhature\b/.test(source)) {
+    const chole = matchCount(source, /(\d+(?:\.\d+)?)\s*(?:katori|katoris|bowl|bowls)\s*(?:of\s+)?(?:chole|chana)/) || 1;
+    totals = add(totals, scale({
+      calories: 230,
+      protein_g: 11,
+      carbs_g: 30,
+      fats_g: 8,
+      fiber_g: 8.5,
+      iron_mg: 3.4,
+      zinc_mg: 1.5,
+      magnesium_mg: 58,
+      vitamin_d_iu: 0,
+      calcium_mg: 55,
+      vitamin_b12_mcg: 0,
+    }, chole));
+    parts.push(`${chole} katori chole`);
+  }
+
+  if (/\begg bhurji\b|\banda bhurji\b|\bbhurji\b/.test(source)) {
+    const bhurjiEggs = eggCount > 0 ? 0 : matchCount(source, /(\d+(?:\.\d+)?)\s*(?:egg|eggs|anda)\b/) || 2;
+    if (bhurjiEggs > 0) {
+      totals = add(totals, scale({
+        calories: 95,
+        protein_g: 7,
+        carbs_g: 1.5,
+        fats_g: 7,
+        fiber_g: 0.2,
+        iron_mg: 1,
+        zinc_mg: 0.7,
+        magnesium_mg: 8,
+        vitamin_d_iu: 44,
+        calcium_mg: 32,
+        vitamin_b12_mcg: 0.6,
+      }, bhurjiEggs));
+      parts.push(`${bhurjiEggs} egg bhurji`);
+    }
+  }
+
+  if (/chicken curry|chicken masala|murgh/.test(source) && chickenG === 0) {
+    totals = add(totals, {
+      calories: 280,
+      protein_g: 28,
+      carbs_g: 8,
+      fats_g: 14,
+      fiber_g: 1.5,
+      iron_mg: 1.4,
+      zinc_mg: 2.2,
+      magnesium_mg: 32,
+      vitamin_d_iu: 8,
+      calcium_mg: 30,
+      vitamin_b12_mcg: 0.4,
+    });
+    parts.push("1 katori chicken curry");
+  }
+
+  if (/curd rice|thayir sadam|dahi bhat|dahi rice/.test(source)) {
+    totals = add(totals, {
+      calories: 260,
+      protein_g: 8,
+      carbs_g: 38,
+      fats_g: 8,
+      fiber_g: 1.2,
+      iron_mg: 0.6,
+      zinc_mg: 0.9,
+      magnesium_mg: 28,
+      vitamin_d_iu: 4,
+      calcium_mg: 180,
+      vitamin_b12_mcg: 0.4,
+    });
+    parts.push("1 plate curd rice");
+  }
+
+  if (/peanut chutney|groundnut chutney|shengdana/.test(source)) {
+    const tbsp = matchCount(source, /(\d+(?:\.\d+)?)\s*(?:tbsp|tablespoon|tablespoons)\s*(?:of\s+)?(?:peanut|groundnut)\s*chutney/) || 2;
+    totals = add(totals, scale({
+      calories: 55,
+      protein_g: 2.2,
+      carbs_g: 2,
+      fats_g: 4.5,
+      fiber_g: 0.8,
+      iron_mg: 0.3,
+      zinc_mg: 0.4,
+      magnesium_mg: 14,
+      vitamin_d_iu: 0,
+      calcium_mg: 8,
+      vitamin_b12_mcg: 0,
+    }, tbsp));
+    parts.push(`${tbsp} tbsp peanut chutney`);
+  }
+
   if (totals.calories === 0) {
     totals = {
       calories: 380,

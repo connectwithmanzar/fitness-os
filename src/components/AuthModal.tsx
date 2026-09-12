@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, User, X } from "lucide-react";
 import { setGuestMode } from "@/lib/auth-session";
+import { downloadBackup, importBackupJson } from "@/lib/backup";
 import { getSupabase } from "@/lib/supabaseClient";
 
 type AuthTab = "signin" | "signup";
@@ -46,6 +47,8 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [backupNote, setBackupNote] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -261,6 +264,71 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
         {error ? (
           <p className="mt-3 text-sm font-medium text-amber-300">{error}</p>
         ) : null}
+
+        <div className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/70 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+            Local backup
+          </p>
+          <p className="mt-1 text-xs text-neutral-400">
+            Export or merge meals, workouts, targets, and splits. No cloud required.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                downloadBackup();
+                setBackupNote("Backup downloaded.");
+              }}
+              className="rounded-xl border border-neutral-700 py-2.5 text-xs font-semibold text-white transition active:scale-98"
+            >
+              Export JSON
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-xl border border-neutral-700 py-2.5 text-xs font-semibold text-white transition active:scale-98"
+            >
+              Import JSON
+            </button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) {
+                return;
+              }
+              if (
+                !window.confirm(
+                  "Merge this backup into local data? Matching ids will be overwritten."
+                )
+              ) {
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = () => {
+                try {
+                  const text = typeof reader.result === "string" ? reader.result : "";
+                  importBackupJson(text);
+                  setBackupNote("Backup merged. Reloading…");
+                  window.setTimeout(() => {
+                    window.location.reload();
+                  }, 400);
+                } catch {
+                  setError("Could not read that backup file.");
+                }
+              };
+              reader.readAsText(file);
+            }}
+          />
+          {backupNote ? (
+            <p className="mt-2 text-xs text-emerald-300">{backupNote}</p>
+          ) : null}
+        </div>
 
         <button
           type="button"

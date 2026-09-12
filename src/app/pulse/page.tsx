@@ -173,6 +173,69 @@ function formatAmount(value: number, digits = 0): string {
   return value.toLocaleString("en-IN", { maximumFractionDigits: digits });
 }
 
+function weeklySummaryMarkdown(
+  weekTrends: DayTrend[],
+  workouts: CompletedWorkout[]
+): string {
+  const totalVolume = weekTrends.reduce((sum, day) => sum + day.volumeKg, 0);
+  const totalSets = weekTrends.reduce((sum, day) => sum + day.setsCompleted, 0);
+  const proteinHits = weekTrends.filter((day) => day.proteinAdherence === "hit").length;
+  const trainingDays = weekTrends.filter((day) => day.workoutCompleted).length;
+  const rangeStart = weekTrends[0]?.key ?? "";
+  const rangeEnd = weekTrends[weekTrends.length - 1]?.key ?? "";
+  const keys = new Set(weekTrends.map((day) => day.key));
+
+  const lifts = new Map<string, { sets: number; volume: number }>();
+  for (const workout of workouts) {
+    const date = new Date(workout.completedAt);
+    if (Number.isNaN(date.getTime())) {
+      continue;
+    }
+    const key = localDayKey(date);
+    if (!keys.has(key)) {
+      continue;
+    }
+    for (const exercise of workout.exercises) {
+      const current = lifts.get(exercise.name) ?? { sets: 0, volume: 0 };
+      for (const set of exercise.sets) {
+        if (!set.completed) {
+          continue;
+        }
+        current.sets += 1;
+        const weight = Number(set.weightKg);
+        const reps = Number(set.reps);
+        if (Number.isFinite(weight) && Number.isFinite(reps)) {
+          current.volume += weight * reps;
+        }
+      }
+      lifts.set(exercise.name, current);
+    }
+  }
+
+  const topLifts = Array.from(lifts.entries())
+    .sort((left, right) => right[1].volume - left[1].volume)
+    .slice(0, 5)
+    .map(
+      ([name, stats], index) =>
+        `${index + 1}. ${name} — ${stats.sets} sets, ${Math.round(stats.volume)} kg volume`
+    );
+
+  return [
+    `## Fitness OS — 7-day summary`,
+    `${rangeStart} → ${rangeEnd}`,
+    "",
+    `- Training days: ${trainingDays}/7`,
+    `- Sets: ${totalSets}`,
+    `- Volume: ${Math.round(totalVolume)} kg`,
+    `- Protein adherence (hit days): ${proteinHits}/7`,
+    "",
+    "### Top lifts",
+    topLifts.length > 0 ? topLifts.join("\n") : "- No completed lifts in this window",
+    "",
+    "Paste into Claude/Cursor for a weekly review. No extra API cost.",
+  ].join("\n");
+}
+
 function percent(consumed: number, target: number): number {
   if (target <= 0) {
     return 0;
@@ -206,6 +269,7 @@ export default function PulsePage() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [auditOpen, setAuditOpen] = useState(true);
   const [dietTargets, setDietTargets] = useState<DailyMacroTargets>(DAILY_MACRO_TARGETS);
+  const [copiedSummary, setCopiedSummary] = useState(false);
 
   useEffect(() => {
     const nextWorkouts = loadWorkoutHistory();
@@ -564,16 +628,34 @@ export default function PulsePage() {
               Training Volume &amp; Nutrition Consistency
             </p>
           </div>
-          <svg viewBox="0 0 84 28" className="h-7 w-[84px] text-emerald-400" aria-hidden="true">
-            <polyline
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              points={calorieSpark}
-            />
-          </svg>
+          <div className="flex flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                const markdown = weeklySummaryMarkdown(weekTrends, workouts);
+                try {
+                  await navigator.clipboard.writeText(markdown);
+                  setCopiedSummary(true);
+                  window.setTimeout(() => setCopiedSummary(false), 2000);
+                } catch {
+                  setCopiedSummary(false);
+                }
+              }}
+              className="rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] font-semibold text-neutral-200"
+            >
+              {copiedSummary ? "Copied" : "Copy weekly summary"}
+            </button>
+            <svg viewBox="0 0 84 28" className="h-7 w-[84px] text-emerald-400" aria-hidden="true">
+              <polyline
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                points={calorieSpark}
+              />
+            </svg>
+          </div>
         </div>
 
         {!hasWeekActivity ? (
