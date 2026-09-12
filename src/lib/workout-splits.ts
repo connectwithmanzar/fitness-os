@@ -117,6 +117,55 @@ export function persistCustomSplits(splits: WorkoutSplit[]): void {
   window.localStorage.setItem(CUSTOM_SPLITS_KEY, JSON.stringify(splits));
 }
 
+const PUSH_PULL_LEGS = ["push", "pull", "legs"] as const;
+
+export function inferSplitIdFromWorkout(workout: {
+  name?: string;
+  splitId?: string | null;
+} | null): string | null {
+  if (!workout) {
+    return null;
+  }
+  if (
+    workout.splitId &&
+    WORKOUT_SPLITS.some((split) => split.id === workout.splitId)
+  ) {
+    return workout.splitId;
+  }
+  const name = (workout.name ?? "").toLowerCase();
+  if (name.includes("push")) {
+    return "push";
+  }
+  if (name.includes("pull")) {
+    return "pull";
+  }
+  if (name.includes("leg")) {
+    return "legs";
+  }
+  if (name.includes("upper")) {
+    return "upper";
+  }
+  if (name.includes("lower")) {
+    return "lower";
+  }
+  if (name.includes("full")) {
+    return "full";
+  }
+  return null;
+}
+
+export function suggestNextSplit(
+  history: Array<{ name?: string; splitId?: string | null }>
+): WorkoutSplit {
+  const lastId = inferSplitIdFromWorkout(history[0] ?? null);
+  const index = PUSH_PULL_LEGS.indexOf(lastId as (typeof PUSH_PULL_LEGS)[number]);
+  if (index >= 0) {
+    const nextId = PUSH_PULL_LEGS[(index + 1) % PUSH_PULL_LEGS.length];
+    return WORKOUT_SPLITS.find((split) => split.id === nextId) ?? WORKOUT_SPLITS[0];
+  }
+  return WORKOUT_SPLITS.find((split) => split.id === "full") ?? WORKOUT_SPLITS[0];
+}
+
 export function saveCustomSplit(split: WorkoutSplit): WorkoutSplit[] {
   const next = [
     { ...split, custom: true as const },

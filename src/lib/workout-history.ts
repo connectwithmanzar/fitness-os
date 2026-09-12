@@ -19,6 +19,7 @@ export type CompletedWorkout = {
   name: string;
   completedAt: string;
   exercises: HistoryExercise[];
+  splitId?: string;
 };
 
 function isHistorySet(value: unknown): value is HistorySet {

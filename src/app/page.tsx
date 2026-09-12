@@ -16,6 +16,7 @@ import {
   exercisesForSplit,
   loadCustomSplits,
   saveCustomSplit,
+  WORKOUT_SPLITS,
   type WorkoutSplit,
 } from "@/lib/workout-splits";
 import {
@@ -297,6 +298,7 @@ export default function WorkoutPage() {
   const [restRemaining, setRestRemaining] = useState<number | null>(null);
   const [customSplits, setCustomSplits] = useState<WorkoutSplit[]>([]);
   const [splitName, setSplitName] = useState("");
+  const [suggestedSplitId, setSuggestedSplitId] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -312,6 +314,16 @@ export default function WorkoutPage() {
     }
     setHistory(loadWorkoutHistory());
     setCustomSplits(loadCustomSplits());
+    const suggest = new URLSearchParams(window.location.search).get("suggest");
+    if (suggest) {
+      setSuggestedSplitId(suggest);
+      const match = [...loadCustomSplits(), ...WORKOUT_SPLITS].find(
+        (split) => split.id === suggest
+      );
+      if (match) {
+        setBanner(`Today's plan: ${match.title}`);
+      }
+    }
     setHydrated(true);
 
     const client = getSupabase();
@@ -411,6 +423,7 @@ export default function WorkoutPage() {
       name: sessionName({ ...session, exercises: validExercises }),
       completedAt,
       exercises: validExercises,
+      splitId: session.splitId,
     };
     setHistory(appendWorkoutHistory(completed));
     persistLastCompletedWorkout(completedAt);
@@ -554,8 +567,12 @@ export default function WorkoutPage() {
                   key={split.id}
                   type="button"
                   onClick={() => startSplit(split)}
-                  className={`min-h-12 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 text-left transition hover:border-emerald-500/50 active:scale-95 ${
+                  className={`min-h-12 rounded-2xl border bg-neutral-900 p-4 text-left transition hover:border-emerald-500/50 active:scale-95 ${
                     split.id === "empty" ? "col-span-2" : ""
+                  } ${
+                    suggestedSplitId === split.id
+                      ? "border-emerald-500"
+                      : "border-neutral-800"
                   }`}
                 >
                   <p className="text-sm font-semibold text-white">{split.title}</p>

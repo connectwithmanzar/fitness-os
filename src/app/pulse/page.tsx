@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Check, ChevronDown, Dumbbell, Moon } from "lucide-react";
+import { Activity, Check, ChevronDown, Moon } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
 import {
   isSameLocalDay,
@@ -26,6 +26,7 @@ import {
   totalVolumeKg,
   type CompletedWorkout,
 } from "@/lib/workout-history";
+import { suggestNextSplit } from "@/lib/workout-splits";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { useReloadLocalFitnessData } from "@/hooks/useReloadLocalFitnessData";
 
@@ -157,17 +158,6 @@ function formatDate(date: Date): string {
     weekday: "short",
     month: "short",
     day: "numeric",
-  }).format(date);
-}
-
-function formatTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
   }).format(date);
 }
 
@@ -408,6 +398,11 @@ export default function PulsePage() {
     )
   );
 
+  const suggestedSplit = useMemo(() => suggestNextSplit(workouts), [workouts]);
+  const uncheckedBedtime = BEDTIME_ITEMS.filter((item) => !checked.includes(item.id)).length;
+  const magnesiumUnchecked = !checked.includes("magnesium");
+  const recoverHighlight = trainingCompleted && magnesiumUnchecked;
+
   const toggleCheck = (id: BedtimeId) => {
     setChecked((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
@@ -441,56 +436,111 @@ export default function PulsePage() {
         </div>
       </header>
 
-      {trainingCompleted && latestWorkout ? (
-        <section className="mt-6 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
-                Training Completed
+      <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
+        <h2 className="text-lg font-semibold">Today&apos;s Plan</h2>
+        <p className="mt-1 text-sm text-neutral-500">Train, eat, recover — that&apos;s the day.</p>
+
+        <article
+          className={`mt-4 rounded-2xl border p-4 ${
+            trainingCompleted
+              ? "border-emerald-500/40 bg-emerald-500/10"
+              : "border-neutral-800 bg-neutral-950/70"
+          }`}
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+            Train
+          </p>
+          {trainingCompleted && latestWorkout ? (
+            <>
+              <h3 className="mt-1 text-base font-semibold text-white">Training done ✓</h3>
+              <p className="mt-1 text-sm text-neutral-300">
+                {latestWorkout.name} • {completedSetCount(latestWorkout)} sets
               </p>
-              <h2 className="mt-1 text-base font-semibold text-white">
-                {latestWorkout.name}
-              </h2>
-              <p className="mt-1 text-xs text-emerald-200/80">
-                {formatTime(latestWorkout.completedAt)} •{" "}
-                {completedSetCount(latestWorkout)} sets •{" "}
-                {formatAmount(totalVolumeKg(latestWorkout))}kg
+            </>
+          ) : (
+            <>
+              <h3 className="mt-1 text-base font-semibold text-white">
+                Next: {suggestedSplit.title}
+              </h3>
+              <p className="mt-1 text-sm text-neutral-300">
+                {suggestedSplit.detail}. Or start empty if you want to pick lifts.
               </p>
-            </div>
-            <Dumbbell className="h-5 w-5 text-emerald-400" />
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {latestWorkout.exercises.slice(0, 4).map((exercise) => (
-              <span
-                key={exercise.id}
-                className="rounded-full border border-emerald-500/20 bg-neutral-950/40 px-2.5 py-1 text-[11px] text-emerald-100"
-              >
-                {exercise.name}
-              </span>
-            ))}
-          </div>
-        </section>
-      ) : (
-        <section className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">
-                Training Pending
-              </p>
-              <p className="mt-1 text-sm text-neutral-200">
-                No session in today&apos;s workout history yet.
-              </p>
-            </div>
-            <Dumbbell className="h-5 w-5 text-amber-300" />
-          </div>
+            </>
+          )}
           <Link
-            href="/"
-            className="tap-target mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-black transition active:scale-95"
+            href={trainingCompleted ? "/" : `/?suggest=${suggestedSplit.id}`}
+            className="tap-target mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-black transition active:scale-95"
           >
-            Log a workout
+            {trainingCompleted ? "Open Workout" : `Start ${suggestedSplit.title}`}
           </Link>
-        </section>
-      )}
+        </article>
+
+        <article
+          className={`mt-3 rounded-2xl border p-4 ${
+            proteinDeficit
+              ? "border-red-500/40 bg-red-500/10"
+              : "border-neutral-800 bg-neutral-950/70"
+          }`}
+        >
+          <p
+            className={`text-[11px] font-semibold uppercase tracking-wide ${
+              proteinDeficit ? "text-red-300" : "text-emerald-300"
+            }`}
+          >
+            Eat
+          </p>
+          <h3 className="mt-1 text-base font-semibold text-white">
+            {proteinDeficit ? "Hit protein" : "Stay on your macros"}
+          </h3>
+          <p className="mt-1 text-sm text-neutral-300">
+            {formatAmount(gaps.calories)} kcal left • {formatAmount(gaps.protein_g, 1)}g protein left
+          </p>
+          <Link
+            href="/diet"
+            className="tap-target mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 py-3.5 text-sm font-semibold text-white transition active:scale-95"
+          >
+            Log food
+          </Link>
+        </article>
+
+        <article
+          className={`mt-3 rounded-2xl border p-4 ${
+            recoverHighlight
+              ? "border-amber-400/40 bg-amber-400/10"
+              : "border-neutral-800 bg-neutral-950/70"
+          }`}
+        >
+          <p
+            className={`text-[11px] font-semibold uppercase tracking-wide ${
+              recoverHighlight ? "text-amber-300" : "text-emerald-300"
+            }`}
+          >
+            Recover
+          </p>
+          <h3 className="mt-1 text-base font-semibold text-white">
+            {uncheckedBedtime === 0
+              ? "Recovery stack done"
+              : `${uncheckedBedtime} bedtime check${uncheckedBedtime === 1 ? "" : "s"} left`}
+          </h3>
+          <p className="mt-1 text-sm text-neutral-300">
+            {recoverHighlight
+              ? "Training is done — take magnesium before bed."
+              : "Sleep, magnesium, and electrolytes protect tomorrow."}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              document.getElementById("bedtime")?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+            }}
+            className="tap-target mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 py-3.5 text-sm font-semibold text-white transition active:scale-95"
+          >
+            Open bedtime stack
+          </button>
+        </article>
+      </section>
 
       <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
         <h2 className="text-sm font-semibold">Today&apos;s Macro Overview</h2>
@@ -755,7 +805,10 @@ export default function PulsePage() {
         </p>
       </section>
 
-      <section className="rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
+      <section
+        id="bedtime"
+        className="scroll-mt-24 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4"
+      >
         <div className="flex items-center gap-2">
           <Moon className="h-4 w-4 text-emerald-400" />
           <h2 className="text-sm font-semibold">Bedtime Prescription</h2>
