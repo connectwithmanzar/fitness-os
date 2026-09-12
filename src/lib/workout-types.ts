@@ -10,6 +10,10 @@ export type WorkoutExercise = {
   id: string;
   name: string;
   previousSetLabel: string;
+  gifUrl?: string;
+  stillUrl?: string;
+  muscle?: string;
+  equipment?: string;
   sets: WorkoutSet[];
 };
 

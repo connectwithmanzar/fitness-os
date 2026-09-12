@@ -20,12 +20,14 @@ export function createEmptySet(setNumber: number): WorkoutSet {
   };
 }
 
-export function createExercise(name: string): WorkoutExercise {
+export function createExercise(name: string, setCount = 1): WorkoutExercise {
   return {
     id: createId(),
     name,
     previousSetLabel: "Prev: —",
-    sets: [createEmptySet(1)],
+    sets: Array.from({ length: Math.max(1, setCount) }, (_, index) =>
+      createEmptySet(index + 1)
+    ),
   };
 }
 

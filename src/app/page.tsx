@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Check, Plus, Search, Trash2, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Plus, Trash2 } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
+import { ExerciseSelectorModal } from "@/components/ExerciseSelectorModal";
+import { ExerciseThumb } from "@/components/ExerciseThumb";
+import {
+  findExerciseByName,
+  type LibraryExercise,
+  type MuscleGroup,
+} from "@/lib/exerciseDatabase";
 import { getSupabase } from "@/lib/supabaseClient";
 import {
   appendWorkoutHistory,
@@ -18,9 +25,6 @@ import { finishWorkoutSession } from "@/lib/workout-sync";
 
 const STORAGE_KEY = "active_workout_session";
 
-type MuscleGroup = "Chest" | "Back" | "Legs" | "Shoulders" | "Arms";
-type ExerciseFilter = "All" | MuscleGroup;
-
 type WorkoutSet = {
   id: string;
   setNumber: number;
@@ -32,6 +36,10 @@ type WorkoutSet = {
 type WorkoutExercise = {
   id: string;
   name: string;
+  gifUrl?: string;
+  stillUrl?: string;
+  muscle?: MuscleGroup;
+  equipment?: string;
   sets: WorkoutSet[];
 };
 
@@ -41,27 +49,6 @@ type ActiveWorkoutSession = {
   finishedAt: string | null;
   exercises: WorkoutExercise[];
 };
-
-const FILTERS: ExerciseFilter[] = ["All", "Chest", "Back", "Legs", "Shoulders", "Arms"];
-
-const CATALOG: Array<{ name: string; group: MuscleGroup }> = [
-  { name: "Barbell Bench Press", group: "Chest" },
-  { name: "Incline Dumbbell Press", group: "Chest" },
-  { name: "Cable Flyes", group: "Chest" },
-  { name: "Dips", group: "Chest" },
-  { name: "Lat Pulldown", group: "Back" },
-  { name: "Barbell Row", group: "Back" },
-  { name: "Pull-ups", group: "Back" },
-  { name: "Barbell Deadlift", group: "Back" },
-  { name: "Squat", group: "Legs" },
-  { name: "Leg Press", group: "Legs" },
-  { name: "Romanian Deadlift", group: "Legs" },
-  { name: "Overhead Press", group: "Shoulders" },
-  { name: "Dumbbell Lateral Raise", group: "Shoulders" },
-  { name: "Bicep Curls", group: "Arms" },
-  { name: "Hammer Curl", group: "Arms" },
-  { name: "Tricep Rope Pushdown", group: "Arms" },
-];
 
 function createId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -74,8 +61,17 @@ function createSet(setNumber: number): WorkoutSet {
   return { id: createId(), setNumber, weightKg: "", reps: "", completed: false };
 }
 
-function createExercise(name: string): WorkoutExercise {
-  return { id: createId(), name, sets: [createSet(1)] };
+function createExercise(exercise: LibraryExercise): WorkoutExercise {
+  const setCount = Math.max(1, exercise.defaultSets);
+  return {
+    id: createId(),
+    name: exercise.name,
+    gifUrl: exercise.gifUrl || undefined,
+    stillUrl: exercise.stillUrl || undefined,
+    muscle: exercise.muscle,
+    equipment: exercise.equipment,
+    sets: Array.from({ length: setCount }, (_, index) => createSet(index + 1)),
+  };
 }
 
 function createSession(): ActiveWorkoutSession {
@@ -93,16 +89,44 @@ function isSession(value: unknown): value is ActiveWorkoutSession {
 function sessionName(exercises: WorkoutExercise[]): string {
   const groups = new Set<MuscleGroup>();
   for (const exercise of exercises) {
-    const match = CATALOG.find((item) => item.name === exercise.name);
-    if (match) {
-      groups.add(match.group);
+    const muscle = exercise.muscle ?? findExerciseByName(exercise.name)?.muscle;
+    if (muscle) {
+      groups.add(muscle);
     }
   }
   if (groups.has("Chest")) {
-    return "Chest & Workout Session";
+    return "Chest Workout Session";
   }
   const [first] = Array.from(groups);
   return first ? `${first} Workout Session` : "Workout Session";
+}
+
+function previousForSet(
+  exerciseName: string,
+  setIndex: number,
+  history: CompletedWorkout[]
+): string {
+  for (const workout of history) {
+    const match = workout.exercises.find((item) => item.name === exerciseName);
+    if (!match) {
+      continue;
+    }
+    const set = match.sets[setIndex];
+    if (!set) {
+      continue;
+    }
+    const weight = set.weightKg.trim();
+    const reps = set.reps.trim();
+    if (!weight && !reps) {
+      continue;
+    }
+    return `${weight || "0"} × ${reps || "0"}`;
+  }
+  return "—";
+}
+
+function resolveMuscle(exercise: WorkoutExercise): MuscleGroup {
+  return exercise.muscle ?? findExerciseByName(exercise.name)?.muscle ?? "Core";
 }
 
 export default function WorkoutPage() {
@@ -111,9 +135,6 @@ export default function WorkoutPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<ExerciseFilter>("All");
-  const [customName, setCustomName] = useState("");
   const [banner, setBanner] = useState<string | null>(null);
   const [finishError, setFinishError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -169,31 +190,12 @@ export default function WorkoutPage() {
     return () => window.clearTimeout(timeout);
   }, [banner]);
 
-  const visibleExercises = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return CATALOG.filter((exercise) => {
-      const matchesGroup = activeFilter === "All" || exercise.group === activeFilter;
-      return matchesGroup && (query.length === 0 || exercise.name.toLowerCase().includes(query));
-    });
-  }, [activeFilter, searchQuery]);
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSearchQuery("");
-    setActiveFilter("All");
-    setCustomName("");
-  };
-
-  const addExercise = (name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      return;
-    }
+  const addExercise = (exercise: LibraryExercise) => {
     setSession((current) => {
       const base = current ?? createSession();
-      return { ...base, exercises: [...base.exercises, createExercise(trimmed)] };
+      return { ...base, exercises: [...base.exercises, createExercise(exercise)] };
     });
-    closeModal();
+    setIsModalOpen(false);
   };
 
   const finishSession = async () => {
@@ -226,7 +228,6 @@ export default function WorkoutPage() {
     setSession(createSession());
     setFinishError(null);
     setBanner("Workout Saved to History!");
-    closeModal();
   };
 
   if (!session) {
@@ -238,7 +239,7 @@ export default function WorkoutPage() {
   }
 
   return (
-    <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-36 pt-6 font-sans text-white">
+    <section className="mx-auto min-h-screen max-w-md overflow-x-hidden bg-neutral-950 px-4 pb-36 pt-6 font-sans text-white">
       <header className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
@@ -282,13 +283,37 @@ export default function WorkoutPage() {
             No exercises yet. Tap below to add a movement.
           </div>
         ) : (
-          session.exercises.map((exercise) => (
+          session.exercises.map((exercise) => {
+            const muscle = resolveMuscle(exercise);
+            const catalog = findExerciseByName(exercise.name);
+            return (
             <article
               key={exercise.id}
-              className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/90 p-4"
+              className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4"
             >
               <div className="flex items-start justify-between gap-3">
-                <h2 className="text-base font-semibold">{exercise.name}</h2>
+                <div className="flex min-w-0 items-center gap-3">
+                  <ExerciseThumb
+                    name={exercise.name}
+                    muscle={muscle}
+                    gifUrl={exercise.gifUrl ?? catalog?.gifUrl ?? ""}
+                    stillUrl={exercise.stillUrl ?? catalog?.stillUrl}
+                    className="h-[52px] w-[52px] shrink-0 rounded-xl object-cover"
+                  />
+                  <div className="min-w-0">
+                    <h2 className="truncate text-base font-semibold text-white">{exercise.name}</h2>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                        {muscle}
+                      </span>
+                      {exercise.equipment || catalog?.equipment ? (
+                        <span className="rounded-full border border-neutral-800 px-2 py-0.5 text-[10px] font-medium text-neutral-400">
+                          {exercise.equipment ?? catalog?.equipment}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() =>
@@ -307,27 +332,30 @@ export default function WorkoutPage() {
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-              <div className="mt-4 grid grid-cols-[2rem_minmax(3rem,1fr)_1fr_1fr_2.25rem] gap-2 text-[11px] uppercase text-neutral-500">
-                <span className="text-center">SET</span>
-                <span className="text-center">PREV</span>
-                <span className="text-center">KG</span>
-                <span className="text-center">REPS</span>
+              <div className="mt-4 grid grid-cols-[2rem_minmax(3.5rem,1fr)_1fr_1fr_2.25rem] gap-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                <span className="text-center">Set</span>
+                <span className="text-center">Previous</span>
+                <span className="text-center">Weight</span>
+                <span className="text-center">Reps</span>
                 <span />
               </div>
               <div className="mt-2 flex flex-col gap-2">
-                {exercise.sets.map((set) => (
+                {exercise.sets.map((set, setIndex) => (
                   <div
                     key={set.id}
-                    className="grid grid-cols-[2rem_minmax(3rem,1fr)_1fr_1fr_2.25rem] items-center gap-2"
+                    className="grid grid-cols-[2rem_minmax(3.5rem,1fr)_1fr_1fr_2.25rem] items-center gap-2"
                   >
                     <span className="text-center font-mono text-sm text-neutral-400">
                       {set.setNumber}
                     </span>
-                    <span className="text-center font-mono text-xs text-neutral-500">—</span>
+                    <span className="truncate text-center font-mono text-[11px] text-neutral-500">
+                      {previousForSet(exercise.name, setIndex, history)}
+                    </span>
                     <input
                       inputMode="decimal"
                       value={set.weightKg}
                       readOnly={set.completed}
+                      aria-label={`${exercise.name} set ${set.setNumber} weight`}
                       onChange={(event) =>
                         setSession((current) =>
                           current
@@ -349,12 +377,13 @@ export default function WorkoutPage() {
                             : current
                         )
                       }
-                      className="h-11 rounded-xl border border-neutral-800 bg-neutral-900 text-center font-mono text-sm outline-none focus:border-emerald-500"
+                      className="h-11 min-w-0 rounded-xl border border-neutral-800 bg-neutral-950 text-center font-mono text-sm outline-none focus:border-emerald-500"
                     />
                     <input
                       inputMode="numeric"
                       value={set.reps}
                       readOnly={set.completed}
+                      aria-label={`${exercise.name} set ${set.setNumber} reps`}
                       onChange={(event) =>
                         setSession((current) =>
                           current
@@ -376,7 +405,7 @@ export default function WorkoutPage() {
                             : current
                         )
                       }
-                      className="h-11 rounded-xl border border-neutral-800 bg-neutral-900 text-center font-mono text-sm outline-none focus:border-emerald-500"
+                      className="h-11 min-w-0 rounded-xl border border-neutral-800 bg-neutral-950 text-center font-mono text-sm outline-none focus:border-emerald-500"
                     />
                     <button
                       type="button"
@@ -406,6 +435,7 @@ export default function WorkoutPage() {
                           ? "border-emerald-500 bg-emerald-500 text-black"
                           : "border-neutral-700 text-neutral-500"
                       }`}
+                      aria-label={`Mark ${exercise.name} set ${set.setNumber} complete`}
                     >
                       <Check className="h-4 w-4" />
                     </button>
@@ -434,7 +464,8 @@ export default function WorkoutPage() {
                 Add Set
               </button>
             </article>
-          ))
+            );
+          })
         )}
 
         <button
@@ -497,82 +528,11 @@ export default function WorkoutPage() {
         )}
       </section>
 
-      {isModalOpen ? (
-        <div
-          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center"
-          onClick={closeModal}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="flex max-h-[88vh] w-full max-w-md flex-col rounded-t-3xl border border-neutral-800 bg-neutral-950 sm:rounded-3xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 pb-2 pt-4">
-              <h2 className="text-lg font-semibold">Add Exercise</h2>
-              <button type="button" onClick={closeModal} aria-label="Close">
-                <X className="h-5 w-5 text-neutral-400" />
-              </button>
-            </div>
-            <div className="px-5">
-              <label className="relative block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
-                <input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search exercises..."
-                  className="h-12 w-full rounded-xl border border-neutral-800 bg-neutral-900 pl-10 text-sm outline-none focus:border-emerald-500"
-                />
-              </label>
-              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                {FILTERS.map((filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    onClick={() => setActiveFilter(filter)}
-                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs ${
-                      activeFilter === filter
-                        ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
-                        : "border-neutral-800 text-neutral-400"
-                    }`}
-                  >
-                    {filter}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <ul className="mt-3 min-h-0 flex-1 overflow-y-auto px-5">
-              {visibleExercises.map((exercise) => (
-                <li key={exercise.name} className="border-b border-neutral-900">
-                  <button
-                    type="button"
-                    onClick={() => addExercise(exercise.name)}
-                    className="flex w-full items-center justify-between py-3.5 text-left text-sm"
-                  >
-                    {exercise.name}
-                    <Plus className="h-4 w-4 text-neutral-500" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <div className="flex gap-2 border-t border-neutral-800 px-5 py-4">
-              <input
-                value={customName}
-                onChange={(event) => setCustomName(event.target.value)}
-                placeholder="Custom movement"
-                className="h-11 flex-1 rounded-xl border border-neutral-800 bg-neutral-900 px-3 text-sm outline-none focus:border-emerald-500"
-              />
-              <button
-                type="button"
-                onClick={() => addExercise(customName)}
-                className="rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black"
-              >
-                Add
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ExerciseSelectorModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSelect={addExercise}
+      />
 
       <AuthModal
         isOpen={isAuthOpen}
