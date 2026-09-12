@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, User, X } from "lucide-react";
+import { Loader2, Settings, X } from "lucide-react";
 import { setGuestMode } from "@/lib/auth-session";
 import { downloadBackup, importBackupJson } from "@/lib/backup";
 import { getSupabase } from "@/lib/supabaseClient";
@@ -29,7 +29,7 @@ export function AccountButton({
       className="iconbtn"
       aria-label="Open account"
     >
-      <User className="h-4 w-4" strokeWidth={1.7} />
+      <Settings className="h-4 w-4" strokeWidth={1.7} />
       <span className={`dot ${signedIn ? "on" : ""}`} aria-hidden="true" />
     </button>
   );
@@ -157,7 +157,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="grab" />
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 row between">
           <h3 id="auth-title">Account</h3>
           <button
             type="button"
@@ -193,7 +193,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
           </div>
         ) : (
           <>
-            <div className="mb-4 grid grid-cols-2 gap-2">
+            <div className="row">
               <button
                 type="button"
                 onClick={() => setTab("signin")}
@@ -259,7 +259,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
           <p className="t-foot">
             Export or merge meals, workouts, targets, and splits. No cloud required.
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="row" style={{ marginTop: 12 }}>
             <button
               type="button"
               onClick={() => {

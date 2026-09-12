@@ -9,11 +9,11 @@ type PageHeaderProps = {
 export function PageHeader({ title, subtitle, action }: PageHeaderProps) {
   return (
     <header className="hdr">
-      <div className="min-w-0">
+      <div className="grow">
         <h1>{title}</h1>
         {subtitle ? <p className="sub">{subtitle}</p> : null}
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action}
     </header>
   );
 }

@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { AppBanner } from "@/components/ui/AppBanner";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Meter, meterTone } from "@/components/ui/Meter";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { parseMealScanResult } from "@/lib/diet-parse";
 import {
@@ -276,20 +275,11 @@ export default function DietPage() {
       {banner ? <AppBanner>{banner}</AppBanner> : null}
 
       <div className="card">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2>Remaining</h2>
-            <p className="big">
-              {formatNumber(Math.max(0, targets.calories - totals.calories))}
-            </p>
-            <p className="t-foot" style={{ marginTop: 4 }}>
-              kcal left · {formatNumber(Math.max(0, targets.protein_g - totals.protein_g), 0)}g
-              protein
-            </p>
-          </div>
+        <div className="row between">
+          <h2>Remaining</h2>
           <button
             type="button"
-            className="btn sm"
+            className="btn ghost sm"
             onClick={() => {
               setDraftTargets(targets);
               setEditingTargets((open) => !open);
@@ -298,10 +288,18 @@ export default function DietPage() {
             {editingTargets ? "Close" : "Targets"}
           </button>
         </div>
-
+        <p>
+          <span className="big">
+            {formatNumber(Math.max(0, targets.calories - totals.calories))}
+          </span>
+          <span className="unit">kcal</span>
+        </p>
+        <p className="muted">
+          {formatNumber(Math.max(0, targets.protein_g - totals.protein_g), 0)}g protein left
+        </p>
         {editingTargets ? (
           <form
-            className="mt-4 grid grid-cols-2 gap-2"
+            className="fields"
             onSubmit={(event) => {
               event.preventDefault();
               saveTargets();
@@ -310,13 +308,13 @@ export default function DietPage() {
             {(
               [
                 ["calories", "kcal"],
-                ["protein_g", "Protein"],
-                ["carbs_g", "Carbs"],
-                ["fats_g", "Fat"],
-                ["fiber_g", "Fiber"],
+                ["protein_g", "Protein g"],
+                ["carbs_g", "Carbs g"],
+                ["fats_g", "Fat g"],
+                ["fiber_g", "Fiber g"],
               ] as const
             ).map(([key, label]) => (
-              <label key={key} className="t-foot">
+              <label key={key}>
                 {label}
                 <input
                   inputMode="decimal"
@@ -328,46 +326,18 @@ export default function DietPage() {
                     }))
                   }
                   className="field"
-                  style={{ marginTop: 6 }}
                 />
               </label>
             ))}
-            <button type="submit" className="btn primary" style={{ gridColumn: "1 / -1" }}>
+            <button type="submit" className="btn primary">
               Save targets
             </button>
           </form>
         ) : null}
-
-        <div className="mt-5 flex flex-col gap-3">
-          {(
-            [
-              { label: "Calories", consumed: totals.calories, target: targets.calories, unit: "kcal" },
-              { label: "Protein", consumed: totals.protein_g, target: targets.protein_g, unit: "g" },
-              { label: "Carbs", consumed: totals.carbs_g, target: targets.carbs_g, unit: "g" },
-              { label: "Fat", consumed: totals.fats_g, target: targets.fats_g, unit: "g" },
-              { label: "Fiber", consumed: totals.fiber_g, target: targets.fiber_g, unit: "g" },
-            ] as const
-          ).map((row) => {
-            const percent =
-              row.target > 0 ? Math.min(100, Math.round((row.consumed / row.target) * 100)) : 0;
-            return (
-              <div key={row.label}>
-                <div className="flex items-center justify-between">
-                  <span className="t-sub">{row.label}</span>
-                  <span className="t-foot">
-                    {formatNumber(row.consumed, row.unit === "kcal" ? 0 : 1)} /{" "}
-                    {formatNumber(row.target)} {row.unit}
-                  </span>
-                </div>
-                <Meter value={percent} tone={meterTone(percent)} />
-              </div>
-            );
-          })}
-        </div>
       </div>
 
       <div className="card">
-        <label htmlFor="meal-query" className="t-head">
+        <label htmlFor="meal-query" className="lrow-t">
           What did you eat?
         </label>
         <textarea
@@ -410,7 +380,7 @@ export default function DietPage() {
           )}
         </button>
         {error ? (
-          <p className="t-foot" style={{ marginTop: 10, color: "var(--orange)" }}>
+          <p className="muted" style={{ marginTop: 10, color: "var(--orange)" }}>
             {error}
           </p>
         ) : null}
@@ -431,14 +401,22 @@ export default function DietPage() {
               return (
                 <div key={log.id}>
                   <div className="lrow">
-                    <span className="lrow-m">
-                      <span className="lrow-t">{log.meal_name}</span>
-                      <span className="lrow-s">
-                        {formatNumber(log.calories)} kcal · P {formatNumber(log.protein_g, 1)}g · C{" "}
-                        {formatNumber(log.carbs_g, 1)}g · F {formatNumber(log.fats_g, 1)}g · Fiber{" "}
-                        {formatNumber(fiberG, 0)}g
+                    <button
+                      type="button"
+                      className="lrow tap grow"
+                      style={{ padding: 0, minHeight: 0 }}
+                      onClick={() => setExpandedId(expanded ? null : log.id)}
+                      aria-expanded={expanded}
+                    >
+                      <span className="lrow-m">
+                        <span className="lrow-t">{log.meal_name}</span>
+                        <span className="lrow-s">
+                          {formatNumber(log.calories)} kcal · P {formatNumber(log.protein_g, 1)}g · C{" "}
+                          {formatNumber(log.carbs_g, 1)}g · F {formatNumber(log.fats_g, 1)}g · Fiber{" "}
+                          {formatNumber(fiberG, 0)}g
+                        </span>
                       </span>
-                    </span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -450,25 +428,11 @@ export default function DietPage() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    className="lrow tap"
-                    onClick={() => setExpandedId(expanded ? null : log.id)}
-                    aria-expanded={expanded}
-                  >
-                    <span className="lrow-m">
-                      <span className="lrow-s">
-                        {log.serving_inferred}
-                        {log.source ? ` · ${log.source === "gemini" ? "Gemini" : "Estimate"}` : ""}
-                      </span>
-                    </span>
-                    <ChevronDown
-                      className="lrow-c h-4 w-4"
-                      style={{ transform: expanded ? "rotate(180deg)" : undefined }}
-                    />
-                  </button>
                   {expanded ? (
-                    <div className="t-foot" style={{ padding: "0 14px 14px" }}>
+                    <p className="muted" style={{ padding: "0 14px 14px" }}>
+                      {log.serving_inferred}
+                      {log.source ? ` · ${log.source === "gemini" ? "Gemini" : "Estimate"}` : ""}
+                      {" · "}
                       Iron {formatNumber(log.micronutrients.iron_mg, 1)} mg · Zinc{" "}
                       {formatNumber(log.micronutrients.zinc_mg, 1)} mg · Mg{" "}
                       {formatNumber(log.micronutrients.magnesium_mg, 1)} mg · Ca{" "}
@@ -476,7 +440,7 @@ export default function DietPage() {
                       {formatNumber(log.micronutrients.vitamin_d_iu, 1)} IU · B12{" "}
                       {formatNumber(log.micronutrients.vitamin_b12_mcg, 2)} mcg
                       {log.breakdown_summary ? ` · ${log.breakdown_summary}` : ""}
-                    </div>
+                    </p>
                   ) : null}
                 </div>
               );

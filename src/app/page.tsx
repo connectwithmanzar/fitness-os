@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Dumbbell, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
 import { ExerciseSelectorModal } from "@/components/ExerciseSelectorModal";
 import { ExerciseThumb } from "@/components/ExerciseThumb";
@@ -17,6 +17,7 @@ import {
   loadCustomSplits,
   renameCustomSplit,
   saveCustomSplit,
+  suggestNextSplit,
   WORKOUT_SPLITS,
   type WorkoutSplit,
 } from "@/lib/workout-splits";
@@ -27,7 +28,6 @@ import {
   formatHistoryTimestamp,
   loadWorkoutHistory,
   removeWorkoutHistory,
-  topSetLabel,
   totalVolumeKg,
   type CompletedWorkout,
 } from "@/lib/workout-history";
@@ -302,6 +302,41 @@ function resolveMuscle(exercise: WorkoutExercise): MuscleGroup {
   return exercise.muscle ?? findExerciseByName(exercise.name)?.muscle ?? "Core";
 }
 
+function SplitRow({
+  split,
+  onStart,
+  onMore,
+}: {
+  split: WorkoutSplit;
+  onStart: () => void;
+  onMore?: () => void;
+}) {
+  return (
+    <div className="item">
+      <span className="lrow-i">
+        <Dumbbell className="h-4 w-4" />
+      </span>
+      <div className="grow">
+        <p className="tt">{split.title}</p>
+        <p className="ss">{split.detail}</p>
+      </div>
+      <button type="button" className="tag acc" onClick={onStart}>
+        Start
+      </button>
+      {onMore ? (
+        <button
+          type="button"
+          className="iconbtn"
+          aria-label={`More for ${split.title}`}
+          onClick={onMore}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export default function WorkoutPage() {
   const [session, setSession] = useState<ActiveWorkoutSession | null>(null);
   const [history, setHistory] = useState<CompletedWorkout[]>([]);
@@ -317,23 +352,27 @@ export default function WorkoutPage() {
   const [splitName, setSplitName] = useState("");
   const [suggestedSplitId, setSuggestedSplitId] = useState<string | null>(null);
   const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
+  const [menuSplit, setMenuSplit] = useState<WorkoutSplit | null>(null);
+  const startedFromQuery = useRef(false);
   const dataTick = useReloadLocalFitnessData();
 
   useEffect(() => {
+    let restored: ActiveWorkoutSession | null = null;
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed: unknown = JSON.parse(raw);
-        setSession(isSession(parsed) && !parsed.finishedAt ? parsed : null);
-      } else {
-        setSession(null);
+        restored = isSession(parsed) && !parsed.finishedAt ? parsed : null;
       }
     } catch {
-      setSession(null);
+      restored = null;
     }
+    setSession(restored);
     setHistory(loadWorkoutHistory());
     setCustomSplits(loadCustomSplits());
-    const suggest = new URLSearchParams(window.location.search).get("suggest");
+    const params = new URLSearchParams(window.location.search);
+    const suggest = params.get("suggest");
+    const startNow = params.get("start") === "1";
     if (suggest) {
       setSuggestedSplitId(suggest);
       const match = [...loadCustomSplits(), ...WORKOUT_SPLITS].find(
@@ -341,6 +380,11 @@ export default function WorkoutPage() {
       );
       if (match) {
         setBanner(`Today's plan: ${match.title}`);
+        if (startNow && !startedFromQuery.current && !restored) {
+          startedFromQuery.current = true;
+          setSession(createSession(match, loadWorkoutHistory()));
+          window.history.replaceState({}, "", "/");
+        }
       }
     }
     setHydrated(true);
@@ -419,6 +463,11 @@ export default function WorkoutPage() {
       app.classList.remove("resting");
     };
   }, [restRemaining]);
+
+  const todayPlan = useMemo(() => {
+    const all = [...customSplits, ...WORKOUT_SPLITS];
+    return all.find((split) => split.id === suggestedSplitId) ?? suggestNextSplit(history);
+  }, [customSplits, history, suggestedSplitId]);
 
   const addExercise = (exercise: LibraryExercise) => {
     setSession((current) => {
@@ -553,6 +602,7 @@ export default function WorkoutPage() {
       )
     : 0;
   const progressPct = setCount > 0 ? (doneCount / setCount) * 100 : 0;
+  const weekdayName = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
 
   const patchSet = (
     exerciseId: string,
@@ -586,7 +636,7 @@ export default function WorkoutPage() {
             title={sessionName(session)}
             subtitle={`${doneCount}/${setCount} sets`}
             action={
-              <div className="flex items-center gap-2">
+              <div className="row">
                 <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
                 <button
                   type="button"
@@ -625,12 +675,8 @@ export default function WorkoutPage() {
       ) : (
         <>
           <PageHeader
-            title="Train"
-            subtitle={new Intl.DateTimeFormat("en-US", {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-            }).format(new Date())}
+            title="Start workout"
+            subtitle={`${weekdayName} — today is ${todayPlan.title}`}
             action={<AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />}
           />
           <InstallAppHint />
@@ -686,7 +732,7 @@ export default function WorkoutPage() {
 
       <div>
         {!session ? (
-          <div className="mb-8">
+          <div>
             {pendingPlan ? (
               <form
                 className="card"
@@ -696,17 +742,16 @@ export default function WorkoutPage() {
                 }}
               >
                 <h2>Save this as my plan</h2>
-                <p className="t-foot">
+                <p className="muted">
                   Keep {pendingPlan.exerciseIds.length} lifts for next time. Stored on this phone.
                 </p>
-                <input
-                  value={splitName}
-                  onChange={(event) => setSplitName(event.target.value)}
-                  placeholder={pendingPlan.title}
-                  className="field"
-                  style={{ marginTop: 12 }}
-                />
-                <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="fields">
+                  <input
+                    value={splitName}
+                    onChange={(event) => setSplitName(event.target.value)}
+                    placeholder={pendingPlan.title}
+                    className="field"
+                  />
                   <button type="submit" className="btn primary">
                     Save plan
                   </button>
@@ -724,75 +769,48 @@ export default function WorkoutPage() {
               </form>
             ) : null}
 
-            {customSplits.length > 0 ? (
+            <div className="card accent">
+              <h2>Today&apos;s plan</h2>
+              <p className="big">{todayPlan.title}</p>
+              <p className="muted">
+                {todayPlan.exerciseIds.length} lifts · {todayPlan.detail}
+              </p>
+              <button
+                type="button"
+                className="btn primary"
+                style={{ marginTop: 14 }}
+                onClick={() => startSplit(todayPlan)}
+              >
+                Start {todayPlan.title}
+              </button>
+            </div>
+
+            {customSplits.filter((split) => split.id !== todayPlan.id).length > 0 ? (
               <section>
                 <h4 className="sec">My plans</h4>
                 <div className="list">
-                  {customSplits.map((split) => (
-                    <div
-                      key={split.id}
-                      className="item"
-                      style={
-                        suggestedSplitId === split.id
-                          ? { boxShadow: "inset 0 0 0 1.5px var(--acc)" }
-                          : undefined
-                      }
-                    >
-                      <div className="grow">
-                        <p className="tt">{split.title}</p>
-                        <p className="ss">{split.detail}</p>
-                        <span className="chip acc" style={{ marginTop: 6 }}>
-                          Custom
-                        </span>
-                        <div className="mt-2 flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => startSplit(split)}
-                            className="btn primary sm"
-                          >
-                            Start
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => renamePlan(split)}
-                            className="btn sm"
-                          >
-                            Rename
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removePlan(split)}
-                            className="btn sm danger"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                  {customSplits
+                    .filter((split) => split.id !== todayPlan.id)
+                    .map((split) => (
+                      <SplitRow
+                        key={split.id}
+                        split={split}
+                        onStart={() => startSplit(split)}
+                        onMore={() => setMenuSplit(split)}
+                      />
+                    ))}
                 </div>
               </section>
             ) : null}
 
-            <h4 className="sec">Start a session</h4>
+            <h4 className="sec">Other routines</h4>
             <div className="list">
-              {WORKOUT_SPLITS.map((split) => (
-                <button
+              {WORKOUT_SPLITS.filter((split) => split.id !== todayPlan.id).map((split) => (
+                <SplitRow
                   key={split.id}
-                  type="button"
-                  onClick={() => startSplit(split)}
-                  className="item"
-                  style={
-                    suggestedSplitId === split.id
-                      ? { boxShadow: "inset 0 0 0 1.5px var(--acc)" }
-                      : undefined
-                  }
-                >
-                  <div className="grow">
-                    <p className="tt">{split.title}</p>
-                    <p className="ss">{split.detail}</p>
-                  </div>
-                </button>
+                  split={split}
+                  onStart={() => startSplit(split)}
+                />
               ))}
             </div>
           </div>
@@ -808,27 +826,27 @@ export default function WorkoutPage() {
             const hint = overloadHint(exercise.name, history);
             return (
             <article key={exercise.id} className="card">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
+              <div className="row top between">
+                <div className="row grow">
                   <ExerciseThumb
                     name={exercise.name}
                     muscle={muscle}
                     gifUrl={exercise.gifUrl ?? catalog?.gifUrl ?? ""}
                     stillUrl={exercise.stillUrl ?? catalog?.stillUrl}
-                    className="h-[50px] w-[50px] shrink-0 rounded-[9px] object-cover"
+                    className="thumb"
                   />
-                  <div className="min-w-0">
-                    <h2 className="tt truncate" style={{ color: "var(--label)" }}>
+                  <div className="grow">
+                    <p className="tt" style={{ color: "var(--label)", margin: 0 }}>
                       {exercise.name}
-                    </h2>
+                    </p>
                     <div className="chips" style={{ marginTop: 6 }}>
-                      <span className="chip acc">{muscle}</span>
+                      <span className="tag acc">{muscle}</span>
                       {exercise.equipment || catalog?.equipment ? (
-                        <span className="chip">
+                        <span className="tag">
                           {exercise.equipment ?? catalog?.equipment}
                         </span>
                       ) : null}
-                      {hint ? <span className="chip">{hint}</span> : null}
+                      {hint ? <span className="tag">{hint}</span> : null}
                     </div>
                   </div>
                 </div>
@@ -861,9 +879,13 @@ export default function WorkoutPage() {
                   key={set.id}
                   className={`setrow ${set.completed ? "done" : ""}`}
                 >
-                  <span className="n" title={previousForSet(exercise.name, setIndex, history)}>
+                  <button
+                    type="button"
+                    className="n"
+                    title={previousForSet(exercise.name, setIndex, history)}
+                  >
                     {set.setNumber}
-                  </span>
+                  </button>
                   <Stepper
                     variant="w"
                     value={set.weightKg}
@@ -955,14 +977,15 @@ export default function WorkoutPage() {
                 }}
               >
                 <h2>Save this as my plan</h2>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={splitName}
-                    onChange={(event) => setSplitName(event.target.value)}
-                    placeholder="e.g. Heavy Push"
-                    className="field"
-                    style={{ flex: 1 }}
-                  />
+                <div className="row" style={{ marginTop: 8 }}>
+                  <div className="grow">
+                    <input
+                      value={splitName}
+                      onChange={(event) => setSplitName(event.target.value)}
+                      placeholder="e.g. Heavy Push"
+                      className="field"
+                    />
+                  </div>
                   <button type="submit" className="btn primary sm">
                     Save
                   </button>
@@ -995,21 +1018,14 @@ export default function WorkoutPage() {
         ) : (
           <div className="list">
             {history.map((entry) => (
-              <article key={entry.id} className="item" style={{ alignItems: "flex-start" }}>
+              <article key={entry.id} className="item">
                 <div className="grow">
                   <p className="ss">{formatHistoryTimestamp(entry.completedAt)}</p>
                   <p className="tt">{entry.name}</p>
-                  <div className="chips" style={{ marginTop: 8 }}>
-                    <span className="chip acc">
-                      {completedSetCount(entry)} sets
-                      {totalVolumeKg(entry) > 0 ? ` • ${Math.round(totalVolumeKg(entry))}kg` : ""}
-                    </span>
-                    {entry.exercises.map((exercise) => (
-                      <span key={exercise.id} className="chip">
-                        {exercise.name}: {topSetLabel(exercise)}
-                      </span>
-                    ))}
-                  </div>
+                  <p className="ss">
+                    {completedSetCount(entry)} sets
+                    {totalVolumeKg(entry) > 0 ? ` · ${Math.round(totalVolumeKg(entry))}kg` : ""}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -1031,6 +1047,43 @@ export default function WorkoutPage() {
           onClose={() => setIsModalOpen(false)}
           onSelect={addExercise}
         />
+      ) : null}
+
+      {menuSplit ? (
+        <div className="sheet-back" onClick={() => setMenuSplit(null)}>
+          <div
+            className="sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="plan-menu-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="grab" />
+            <h3 id="plan-menu-title">{menuSplit.title}</h3>
+            <div className="stack" style={{ marginTop: 16 }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  renamePlan(menuSplit);
+                  setMenuSplit(null);
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                onClick={() => {
+                  removePlan(menuSplit);
+                  setMenuSplit(null);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <AuthModal

@@ -4,7 +4,7 @@
   "description": "Zero-Cost Autonomous Fitness & Nutrition Engine",
   "id": "/",
   "scope": "/",
-  "start_url": "/?source=pwa",
+  "start_url": "/pulse?source=pwa",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "background_color": "#000000",

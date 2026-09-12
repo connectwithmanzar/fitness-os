@@ -1,12 +1,24 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Moon, Utensils } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Dumbbell,
+  Moon,
+  Utensils,
+} from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Meter, meterTone } from "@/components/ui/Meter";
 import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  FITNESS_DATA_CHANGED_EVENT,
+  WORKOUT_SESSION_CHANGED_EVENT,
+} from "@/lib/fitness-events";
 import {
   isSameLocalDay,
   loadLocalMealLogs,
@@ -23,6 +35,7 @@ import {
   remainingOf,
 } from "@/lib/pulse-engine";
 import { getSupabase } from "@/lib/supabaseClient";
+import { loadSessionFromStorage } from "@/lib/workout-session";
 import {
   completedSetCount,
   loadWorkoutHistory,
@@ -106,24 +119,29 @@ function loadBedtimeChecks(today: string): BedtimeId[] | null {
   }
 }
 
-function lastSevenDays(end: Date): Date[] {
-  const days: Date[] = [];
-  for (let offset = 6; offset >= 0; offset -= 1) {
-    const date = new Date(end);
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - offset);
-    days.push(date);
-  }
-  return days;
+function startOfWeek(anchor: Date, offsetWeeks = 0): Date {
+  const date = new Date(anchor);
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - date.getDay() + offsetWeeks * 7);
+  return date;
+}
+
+function daysOfWeek(weekStart: Date): Date[] {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
+    return date;
+  });
 }
 
 function buildWeekTrends(
-  end: Date,
+  days: Date[],
   meals: MealLog[],
   workouts: CompletedWorkout[],
-  proteinHitG: number
+  proteinHitG: number,
+  todayKey: string
 ): DayTrend[] {
-  return lastSevenDays(end).map((date) => {
+  return days.map((date) => {
     const key = localDayKey(date);
     const dayMeals = meals.filter((log) => isSameLocalDay(log.logged_at, key));
     const dayWorkouts = workouts.filter((entry) =>
@@ -147,7 +165,7 @@ function buildWeekTrends(
       key,
       label: DAY_LETTERS[date.getDay()] ?? "—",
       dayNum: date.getDate(),
-      isToday: key === localDayKey(end),
+      isToday: key === todayKey,
       volumeKg,
       setsCompleted,
       workoutCompleted: dayWorkouts.length > 0,
@@ -161,10 +179,69 @@ function buildWeekTrends(
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
+    weekday: "long",
     day: "numeric",
+    month: "long",
   }).format(date);
+}
+
+const BW_KEY = "fitness_os_bodyweight";
+
+type BodyWeightEntry = { w: number; d: string };
+
+function loadBodyWeight(): BodyWeightEntry | null {
+  try {
+    const raw = window.localStorage.getItem(BW_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as BodyWeightEntry;
+    if (typeof parsed.w !== "number" || !parsed.d) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveBodyWeight(w: number): BodyWeightEntry {
+  const entry: BodyWeightEntry = { w, d: new Date().toISOString() };
+  window.localStorage.setItem(BW_KEY, JSON.stringify(entry));
+  return entry;
+}
+
+function workoutsInWeek(workouts: CompletedWorkout[], weekStart: Date): number {
+  const end = new Date(weekStart);
+  end.setDate(weekStart.getDate() + 7);
+  return workouts.filter((entry) => {
+    const date = new Date(entry.completedAt);
+    return date >= weekStart && date < end;
+  }).length;
+}
+
+function streakWeeks(workouts: CompletedWorkout[], today: Date): number {
+  let streak = 0;
+  for (let offset = 0; offset < 52; offset += 1) {
+    const count = workoutsInWeek(workouts, startOfWeek(today, -offset));
+    if (count > 0) {
+      streak += 1;
+      continue;
+    }
+    if (offset === 0) {
+      continue;
+    }
+    break;
+  }
+  return streak;
+}
+
+function liveSessionName(): string | null {
+  const session = loadSessionFromStorage();
+  if (!session || session.finishedAt) {
+    return null;
+  }
+  return session.name?.trim() || "Session";
 }
 
 function formatAmount(value: number, digits = 0): string {
@@ -256,6 +333,7 @@ function sparklinePoints(values: number[], width: number, height: number): strin
 }
 
 export default function PulsePage() {
+  const router = useRouter();
   const today = useMemo(() => new Date(), []);
   const todayKey = localDayKey(today);
   const [workouts, setWorkouts] = useState<CompletedWorkout[]>([]);
@@ -265,9 +343,15 @@ export default function PulsePage() {
   const [hydrated, setHydrated] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
-  const [auditOpen, setAuditOpen] = useState(true);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(0);
   const [dietTargets, setDietTargets] = useState<DailyMacroTargets>(DAILY_MACRO_TARGETS);
   const [copiedSummary, setCopiedSummary] = useState(false);
+  const [bodyWeight, setBodyWeight] = useState<BodyWeightEntry | null>(null);
+  const [loggingWeight, setLoggingWeight] = useState(false);
+  const [draftWeight, setDraftWeight] = useState("");
+  const [liveName, setLiveName] = useState<string | null>(null);
   const dataTick = useReloadLocalFitnessData();
   const bedtimeSeededDayRef = useRef<string | null>(null);
 
@@ -277,6 +361,8 @@ export default function PulsePage() {
     setWorkouts(nextWorkouts);
     setMeals(nextMeals);
     setDietTargets(loadDietTargets());
+    setBodyWeight(loadBodyWeight());
+    setLiveName(liveSessionName());
 
     const storedChecks = loadBedtimeChecks(todayKey);
     if (storedChecks !== null) {
@@ -327,6 +413,19 @@ export default function PulsePage() {
   }, []);
 
   useEffect(() => {
+    const sync = () => setLiveName(liveSessionName());
+    sync();
+    window.addEventListener(WORKOUT_SESSION_CHANGED_EVENT, sync);
+    window.addEventListener(FITNESS_DATA_CHANGED_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(WORKOUT_SESSION_CHANGED_EVENT, sync);
+      window.removeEventListener(FITNESS_DATA_CHANGED_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!hydrated) {
       return;
     }
@@ -364,10 +463,20 @@ export default function PulsePage() {
     [totals, trainingCompleted]
   );
 
+  const weekStart = useMemo(() => startOfWeek(today, weekOffset), [today, weekOffset]);
+  const weekDays = useMemo(() => daysOfWeek(weekStart), [weekStart]);
   const weekTrends = useMemo(
-    () => buildWeekTrends(today, meals, workouts, dietTargets.protein_g * 0.85),
-    [dietTargets.protein_g, meals, today, workouts]
+    () =>
+      buildWeekTrends(weekDays, meals, workouts, dietTargets.protein_g * 0.85, todayKey),
+    [dietTargets.protein_g, meals, todayKey, weekDays, workouts]
   );
+  const weekEnd = weekDays[6];
+  const weekLabel =
+    weekOffset === 0
+      ? "This week"
+      : `${weekStart.getDate()} ${weekStart.toLocaleDateString("en-US", { month: "short" })} – ${
+          weekEnd?.getDate() ?? ""
+        } ${weekEnd?.toLocaleDateString("en-US", { month: "short" }) ?? ""}`;
   const hasWeekActivity = weekTrends.some((day) => day.workoutCompleted || day.hasFood);
   const selectedTrend = weekTrends.find((day) => day.key === activeTrendKey) ?? null;
   const calorieSpark = sparklinePoints(
@@ -414,6 +523,29 @@ export default function PulsePage() {
     );
   };
 
+  const thisWeekCount = workoutsInWeek(workouts, startOfWeek(today, 0));
+  const weeksStreak = streakWeeks(workouts, today);
+  const todayTitle = liveName
+    ? `${liveName} — in progress`
+    : trainingCompleted && latestWorkout
+      ? `${latestWorkout.name} — done`
+      : suggestedSplit.title;
+  const todaySub = liveName
+    ? "Open Train to keep logging sets"
+    : trainingCompleted && latestWorkout
+      ? `${completedSetCount(latestWorkout)} sets logged`
+      : suggestedSplit.detail;
+  const todayTag = liveName ? "Resume" : trainingCompleted ? "Done" : "Start";
+  const todayTagClass = liveName ? "tag warn" : trainingCompleted ? "tag" : "tag acc";
+
+  const goToday = () => {
+    if (liveName || trainingCompleted) {
+      router.push("/");
+      return;
+    }
+    router.push(`/?suggest=${encodeURIComponent(suggestedSplit.id)}&start=1`);
+  };
+
   if (!hydrated) {
     return <PageSkeleton />;
   }
@@ -426,293 +558,400 @@ export default function PulsePage() {
         action={<AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />}
       />
 
-      <div className="week">
-        {weekTrends.map((day) => (
-          <button
-            key={day.key}
-            type="button"
-            className={`wday ${day.isToday ? "today" : ""}`}
-            onClick={() =>
-              setActiveTrendKey((current) => (current === day.key ? null : day.key))
-            }
-            aria-label={`${day.label} ${day.dayNum}`}
-          >
-            <div className="lbl">{day.label}</div>
-            <div className="num">{day.dayNum}</div>
-            <div
-              className={`dot ${
-                day.workoutCompleted ? "done" : day.hasFood ? "plan" : ""
-              }`}
-            />
-          </button>
-        ))}
-      </div>
-
-      {selectedTrend ? (
-        <p className="sect-f" style={{ marginTop: -8, marginBottom: 12 }}>
-          {selectedTrend.label}: {selectedTrend.setsCompleted} sets •{" "}
-          {formatAmount(selectedTrend.volumeKg)}kg • {formatAmount(selectedTrend.calories)} kcal
-        </p>
-      ) : null}
-
       <div className="card">
-        <h2>Today&apos;s workout</h2>
-        {trainingCompleted && latestWorkout ? (
-          <>
-            <p className="t-head">Training done</p>
-            <p className="t-foot" style={{ marginTop: 4 }}>
-              {latestWorkout.name} • {completedSetCount(latestWorkout)} sets
-            </p>
-            <Link href="/" className="btn" style={{ marginTop: 14 }}>
-              Open Train
-            </Link>
-          </>
-        ) : (
-          <>
-            <p className="big">{suggestedSplit.title}</p>
-            <p className="t-foot" style={{ marginTop: 6 }}>
-              {suggestedSplit.detail}
-            </p>
-            <Link
-              href={`/?suggest=${suggestedSplit.id}`}
-              className="btn primary"
-              style={{ marginTop: 14 }}
-            >
-              Start {suggestedSplit.title}
-            </Link>
-          </>
-        )}
-      </div>
-
-      <div className="sect">
-        <span className="sect-t">Eat</span>
-        <div className="sect-b">
-          <Link href="/diet" className={`lrow tap ${proteinDeficit ? "danger" : ""}`}>
-            <span className="lrow-i" style={{ background: proteinDeficit ? "var(--red)" : "var(--acc)" }}>
-              <Utensils className="h-4 w-4" />
-            </span>
-            <span className="lrow-m">
-              <span className="lrow-t">{proteinDeficit ? "Hit protein" : "Stay on macros"}</span>
-              <span className="lrow-s">
-                {formatAmount(gaps.calories)} kcal left • {formatAmount(gaps.protein_g, 1)}g protein
-              </span>
-            </span>
-            <ChevronRight className="lrow-c h-4 w-4" />
-          </Link>
-        </div>
-      </div>
-
-      <div className="sect">
-        <span className="sect-t">Recover</span>
-        <div className="sect-b">
+        <div className="row between">
           <button
             type="button"
-            className="lrow tap"
-            onClick={() => {
-              document.getElementById("bedtime")?.scrollIntoView({
-                behavior: "smooth",
-                block: "start",
-              });
-            }}
+            className="iconbtn"
+            aria-label="Previous week"
+            onClick={() => setWeekOffset((value) => value - 1)}
           >
-            <span
-              className="lrow-i"
-              style={{ background: recoverHighlight ? "var(--orange)" : "var(--acc)" }}
-            >
-              <Moon className="h-4 w-4" />
-            </span>
-            <span className="lrow-m">
-              <span className="lrow-t">
-                {uncheckedBedtime === 0
-                  ? "Recovery stack done"
-                  : `${uncheckedBedtime} bedtime check${uncheckedBedtime === 1 ? "" : "s"} left`}
-              </span>
-              <span className="lrow-s">
-                {recoverHighlight
-                  ? "Training is done — take magnesium before bed."
-                  : "Sleep, magnesium, and electrolytes protect tomorrow."}
-              </span>
-            </span>
-            <ChevronRight className="lrow-c h-4 w-4" />
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="muted">{weekLabel}</span>
+          <button
+            type="button"
+            className="iconbtn"
+            aria-label="Next week"
+            onClick={() => setWeekOffset((value) => value + 1)}
+          >
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-      </div>
-
-      <div className="card">
-        <h2>Readiness {readiness}%</h2>
-        <p className="big">{formatAmount(Math.max(0, gaps.calories))}</p>
-        <p className="t-foot">kcal remaining</p>
-        <Meter value={readiness} tone={meterTone(readiness)} />
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {macros.slice(0, 3).map((macro) => (
-            <div key={macro.label}>
-              <p className="t-cap" style={{ color: "var(--label-3)" }}>
-                {macro.label}
-              </p>
-              <p className="t-head">
-                {formatAmount(macro.consumed, macro.id === "calories" ? 0 : 0)}
-              </p>
-              <Meter value={macro.percent} tone={meterTone(macro.percent)} />
-            </div>
+        <div className="week">
+          {weekTrends.map((day) => (
+            <button
+              key={day.key}
+              type="button"
+              className={`wday ${day.isToday ? "today" : ""}`}
+              onClick={() =>
+                setActiveTrendKey((current) => (current === day.key ? null : day.key))
+              }
+              aria-label={`${day.label} ${day.dayNum}`}
+            >
+              <div className="lbl">{day.label}</div>
+              <div className="num">{day.dayNum}</div>
+              <div
+                className={`dot ${
+                  day.workoutCompleted ? "done" : day.hasFood ? "plan" : ""
+                }`}
+              />
+            </button>
           ))}
         </div>
-      </div>
-
-      <div className="sect">
-        <span className="sect-t">Coach</span>
-        <div className="sect-b">
-          {recommendations.length === 0 ? (
-            <div className="lrow">
-              <span className="lrow-m">
-                <span className="lrow-t">No critical gaps</span>
-                <span className="lrow-s">Keep logging meals.</span>
-              </span>
-            </div>
-          ) : (
-            recommendations.map((item) => (
-              <div
-                key={item.id}
-                className={`lrow ${item.id === "protein" ? "danger" : ""}`}
-              >
-                <span className="lrow-m">
-                  <span className="lrow-t">{item.badge}</span>
-                  <span className="lrow-s">{item.suggestion}</span>
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-        {trainingCompleted ? (
+        {selectedTrend ? (
           <p className="sect-f">
-            {highIntensity ? "High-intensity session logged. " : "Training logged. "}
-            Magnesium glycinate (400mg) and electrolytes are critical for recovery.
+            {selectedTrend.label}: {selectedTrend.setsCompleted} sets ·{" "}
+            {formatAmount(selectedTrend.volumeKg)}kg · {formatAmount(selectedTrend.calories)} kcal
           </p>
         ) : null}
-      </div>
-
-      <div className="sect">
-        <button
-          type="button"
-          onClick={() => setAuditOpen((open) => !open)}
-          className="lrow tap"
-          style={{ background: "transparent", paddingLeft: 4 }}
-          aria-expanded={auditOpen}
-        >
-          <span className="lrow-m">
-            <span className="sect-t" style={{ padding: 0 }}>
-              Details
-            </span>
-            <span className="lrow-t">Micronutrient audit</span>
+        <button type="button" className="today-row" onClick={goToday}>
+          <span className="lrow-i">
+            <Dumbbell className="h-4 w-4" />
           </span>
-          <ChevronDown
-            className="lrow-c h-4 w-4"
-            style={{ transform: auditOpen ? "rotate(180deg)" : undefined }}
-          />
+          <span className="grow">
+            <span className="lbl2">Today</span>
+            <span className="ttl">{todayTitle}</span>
+            <span className="ss">{todaySub}</span>
+          </span>
+          <span className={todayTagClass}>{todayTag}</span>
         </button>
-        {auditOpen ? (
-          <div className="card" style={{ marginTop: 8 }}>
-            {microAudit.map((marker) => (
-              <div key={marker.id} style={{ marginBottom: 12 }}>
-                <div className="flex items-center justify-between">
-                  <span className="t-sub">{marker.name}</span>
-                  <span className="t-foot">
-                    {formatAmount(marker.consumed, 1)} / {formatAmount(marker.target)} {marker.unit}
-                  </span>
-                </div>
-                <Meter
-                  value={marker.percent}
-                  tone={marker.deficient ? "low" : meterTone(marker.percent)}
-                />
-              </div>
-            ))}
-          </div>
-        ) : null}
       </div>
 
       <div className="card">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2>7-day pulse</h2>
-            <svg viewBox="0 0 84 28" className="h-7 w-[84px]" style={{ color: "var(--acc)" }} aria-hidden="true">
-              <polyline
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                points={calorieSpark}
-              />
-            </svg>
-          </div>
+        <div className="row between">
+          <h2>Body weight</h2>
           <button
             type="button"
-            className="btn sm"
-            onClick={async () => {
-              const markdown = weeklySummaryMarkdown(weekTrends, workouts);
-              try {
-                await navigator.clipboard.writeText(markdown);
-                setCopiedSummary(true);
-                window.setTimeout(() => setCopiedSummary(false), 2000);
-              } catch {
-                setCopiedSummary(false);
-              }
+            className="btn ghost sm"
+            onClick={() => {
+              setDraftWeight(bodyWeight ? String(bodyWeight.w) : "");
+              setLoggingWeight((open) => !open);
             }}
           >
-            {copiedSummary ? "Copied" : "Copy week"}
+            {loggingWeight ? "Close" : "Log weight"}
           </button>
         </div>
-        {!hasWeekActivity ? (
-          <p className="t-foot">Log sessions to unlock 7-day trends</p>
+        {bodyWeight ? (
+          <p>
+            <span className="big">{bodyWeight.w}</span>
+            <span className="unit">kg</span>
+          </p>
+        ) : (
+          <p className="muted">No entries yet — log your weight to start the curve.</p>
+        )}
+        {loggingWeight ? (
+          <form
+            className="fields"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const next = Number(draftWeight);
+              if (!Number.isFinite(next) || next <= 0) {
+                return;
+              }
+              setBodyWeight(saveBodyWeight(next));
+              setLoggingWeight(false);
+            }}
+          >
+            <label>
+              kg
+              <input
+                className="field"
+                inputMode="decimal"
+                value={draftWeight}
+                onChange={(event) => setDraftWeight(event.target.value)}
+              />
+            </label>
+            <button type="submit" className="btn primary">
+              Save weight
+            </button>
+          </form>
         ) : null}
       </div>
 
-      <section id="bedtime" className="sect" style={{ scrollMarginTop: 24 }}>
-        <span className="sect-t">Bedtime</span>
-        {proteinDeficit ? (
-          <div className="card" style={{ background: "color-mix(in srgb, var(--red) 12%, transparent)" }}>
-            <p className="t-head" style={{ color: "var(--red)" }}>
-              Protein deficit
-            </p>
-            <p className="t-foot" style={{ marginTop: 4 }}>
-              You are at {formatAmount(totals.protein_g, 1)}g / {formatAmount(proteinTarget)}g (
-              {Math.round(proteinRatio * 100)}%). Take 1 scoop whey or 200g Greek yogurt/paneer.
-            </p>
-          </div>
-        ) : null}
-        {fiberDeficit ? (
-          <div className="card" style={{ background: "color-mix(in srgb, var(--orange) 12%, transparent)" }}>
-            <p className="t-head" style={{ color: "var(--orange)" }}>
-              Fiber deficit
-            </p>
-            <p className="t-foot" style={{ marginTop: 4 }}>
-              {formatAmount(totals.fiber_g, 1)}g logged. Take 2 tbsp isabgol / chia seeds before bed.
-            </p>
-          </div>
-        ) : null}
-        <div className="sect-b">
-          {BEDTIME_ITEMS.map((item) => {
-            const isChecked = checked.includes(item.id);
-            return (
+      <button type="button" className="card tappable" onClick={() => setMoreOpen(true)}>
+        <p>
+          <span className="big">{weeksStreak}</span>
+          <span className="unit">week streak</span>
+        </p>
+        <p className="muted">
+          {thisWeekCount} / 3 this week · {workouts.length}{" "}
+          {workouts.length === 1 ? "workout" : "workouts"} total
+        </p>
+      </button>
+
+      <button
+        type="button"
+        className="lrow tap"
+        onClick={() => setMoreOpen((open) => !open)}
+        aria-expanded={moreOpen}
+      >
+        <span className="lrow-m">
+          <span className="lrow-t">More for today</span>
+          <span className="lrow-s">Eat, recover, coach, bedtime</span>
+        </span>
+        <ChevronDown
+          className="lrow-c h-4 w-4"
+          style={{ transform: moreOpen ? "rotate(180deg)" : undefined }}
+        />
+      </button>
+
+      {moreOpen ? (
+        <>
+          <div className="sect">
+            <span className="sect-t">Eat</span>
+            <div className="sect-b">
               <button
-                key={item.id}
                 type="button"
-                className="lrow tap"
-                onClick={() => toggleCheck(item.id)}
+                className={`lrow tap ${proteinDeficit ? "danger" : ""}`}
+                onClick={() => router.push("/diet")}
               >
-                <span className={`ck ${isChecked ? "on" : ""}`}>
-                  <Check className="h-3.5 w-3.5" />
+                <span
+                  className="lrow-i"
+                  style={{ background: proteinDeficit ? "var(--red)" : "var(--acc)" }}
+                >
+                  <Utensils className="h-4 w-4" />
                 </span>
                 <span className="lrow-m">
-                  <span className="lrow-t" style={isChecked ? { color: "var(--label-2)", textDecoration: "line-through" } : undefined}>
-                    {item.title}
+                  <span className="lrow-t">{proteinDeficit ? "Hit protein" : "Stay on macros"}</span>
+                  <span className="lrow-s">
+                    {formatAmount(gaps.calories)} kcal left · {formatAmount(gaps.protein_g, 1)}g
+                    protein
                   </span>
-                  <span className="lrow-s">{item.detail}</span>
                 </span>
               </button>
-            );
-          })}
-        </div>
-      </section>
+            </div>
+          </div>
+
+          <div className="sect">
+            <span className="sect-t">Recover</span>
+            <div className="sect-b">
+              <button
+                type="button"
+                className="lrow tap"
+                onClick={() => {
+                  document.getElementById("bedtime")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
+                }}
+              >
+                <span
+                  className="lrow-i"
+                  style={{ background: recoverHighlight ? "var(--orange)" : "var(--acc)" }}
+                >
+                  <Moon className="h-4 w-4" />
+                </span>
+                <span className="lrow-m">
+                  <span className="lrow-t">
+                    {uncheckedBedtime === 0
+                      ? "Recovery stack done"
+                      : `${uncheckedBedtime} bedtime check${uncheckedBedtime === 1 ? "" : "s"} left`}
+                  </span>
+                  <span className="lrow-s">
+                    {recoverHighlight
+                      ? "Training is done — take magnesium before bed."
+                      : "Sleep, magnesium, and electrolytes protect tomorrow."}
+                  </span>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Readiness {readiness}%</h2>
+            <p>
+              <span className="big">{formatAmount(Math.max(0, gaps.calories))}</span>
+              <span className="unit">kcal left</span>
+            </p>
+            <Meter value={readiness} tone={meterTone(readiness)} />
+            <div className="stack" style={{ marginTop: 12 }}>
+              {macros.slice(0, 3).map((macro) => (
+                <div key={macro.label}>
+                  <div className="row between">
+                    <span className="muted">{macro.label}</span>
+                    <span className="dim">{formatAmount(macro.consumed)}</span>
+                  </div>
+                  <Meter value={macro.percent} tone={meterTone(macro.percent)} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="sect">
+            <span className="sect-t">Coach</span>
+            <div className="sect-b">
+              {recommendations.length === 0 ? (
+                <div className="lrow">
+                  <span className="lrow-m">
+                    <span className="lrow-t">No critical gaps</span>
+                    <span className="lrow-s">Keep logging meals.</span>
+                  </span>
+                </div>
+              ) : (
+                recommendations.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`lrow ${item.id === "protein" ? "danger" : ""}`}
+                  >
+                    <span className="lrow-m">
+                      <span className="lrow-t">{item.badge}</span>
+                      <span className="lrow-s">{item.suggestion}</span>
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+            {trainingCompleted ? (
+              <p className="sect-f">
+                {highIntensity ? "High-intensity session logged. " : "Training logged. "}
+                Magnesium glycinate (400mg) and electrolytes are critical for recovery.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="sect">
+            <button
+              type="button"
+              onClick={() => setAuditOpen((open) => !open)}
+              className="lrow tap"
+              aria-expanded={auditOpen}
+            >
+              <span className="lrow-m">
+                <span className="lrow-t">Micronutrient audit</span>
+              </span>
+              <ChevronDown
+                className="lrow-c h-4 w-4"
+                style={{ transform: auditOpen ? "rotate(180deg)" : undefined }}
+              />
+            </button>
+            {auditOpen ? (
+              <div className="card">
+                {microAudit.map((marker) => (
+                  <div key={marker.id} style={{ marginBottom: 12 }}>
+                    <div className="row between">
+                      <span className="muted">{marker.name}</span>
+                      <span className="dim">
+                        {formatAmount(marker.consumed, 1)} / {formatAmount(marker.target)}{" "}
+                        {marker.unit}
+                      </span>
+                    </div>
+                    <Meter
+                      value={marker.percent}
+                      tone={marker.deficient ? "low" : meterTone(marker.percent)}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="card">
+            <div className="row between">
+              <div>
+                <h2>7-day pulse</h2>
+                <svg
+                  viewBox="0 0 84 28"
+                  width="84"
+                  height="28"
+                  style={{ color: "var(--acc)" }}
+                  aria-hidden="true"
+                >
+                  <polyline
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    points={calorieSpark}
+                  />
+                </svg>
+              </div>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={async () => {
+                  const markdown = weeklySummaryMarkdown(weekTrends, workouts);
+                  try {
+                    await navigator.clipboard.writeText(markdown);
+                    setCopiedSummary(true);
+                    window.setTimeout(() => setCopiedSummary(false), 2000);
+                  } catch {
+                    setCopiedSummary(false);
+                  }
+                }}
+              >
+                {copiedSummary ? "Copied" : "Copy week"}
+              </button>
+            </div>
+            {!hasWeekActivity ? (
+              <p className="muted">Log sessions to unlock 7-day trends</p>
+            ) : null}
+          </div>
+
+          <section id="bedtime" className="sect">
+            <span className="sect-t">Bedtime</span>
+            {proteinDeficit ? (
+              <div
+                className="card"
+                style={{ background: "color-mix(in srgb, var(--red) 12%, transparent)" }}
+              >
+                <p className="lrow-t" style={{ color: "var(--red)" }}>
+                  Protein deficit
+                </p>
+                <p className="muted">
+                  You are at {formatAmount(totals.protein_g, 1)}g / {formatAmount(proteinTarget)}g (
+                  {Math.round(proteinRatio * 100)}%). Take 1 scoop whey or 200g Greek yogurt/paneer.
+                </p>
+              </div>
+            ) : null}
+            {fiberDeficit ? (
+              <div
+                className="card"
+                style={{ background: "color-mix(in srgb, var(--orange) 12%, transparent)" }}
+              >
+                <p className="lrow-t" style={{ color: "var(--orange)" }}>
+                  Fiber deficit
+                </p>
+                <p className="muted">
+                  {formatAmount(totals.fiber_g, 1)}g logged. Take 2 tbsp isabgol / chia seeds before
+                  bed.
+                </p>
+              </div>
+            ) : null}
+            <div className="sect-b">
+              {BEDTIME_ITEMS.map((item) => {
+                const isChecked = checked.includes(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="lrow tap"
+                    onClick={() => toggleCheck(item.id)}
+                  >
+                    <span className={`ck ${isChecked ? "on" : ""}`}>
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="lrow-m">
+                      <span
+                        className="lrow-t"
+                        style={
+                          isChecked
+                            ? { color: "var(--label-2)", textDecoration: "line-through" }
+                            : undefined
+                        }
+                      >
+                        {item.title}
+                      </span>
+                      <span className="lrow-s">{item.detail}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </>
+      ) : null}
 
       <AuthModal
         isOpen={isAuthOpen}
