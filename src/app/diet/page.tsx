@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, Loader2, Trash2, Utensils } from "lucide-react";
+import { AccountButton, AuthModal } from "@/components/AuthModal";
 import { parseMealScanResult } from "@/lib/diet-parse";
 import {
   createMealId,
@@ -18,6 +19,7 @@ import {
 import { DAILY_MACRO_TARGETS, fiberFromEntry } from "@/lib/diet-types";
 import type { DailyMacroTargets, DietEntry, MealLog, MealScanResult } from "@/lib/diet-types";
 import { loadDietTargets, persistDietTargets } from "@/lib/diet-targets";
+import { getSupabase } from "@/lib/supabaseClient";
 
 const SHORTCUTS = [
   "+ 1 Katori Dal",
@@ -62,6 +64,8 @@ export default function DietPage() {
   const [targets, setTargets] = useState<DailyMacroTargets>(DAILY_MACRO_TARGETS);
   const [draftTargets, setDraftTargets] = useState<DailyMacroTargets>(DAILY_MACRO_TARGETS);
   const [editingTargets, setEditingTargets] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(false);
   const todayKey = localDayKey(new Date());
 
   useEffect(() => {
@@ -92,6 +96,28 @@ export default function DietPage() {
 
     void bootstrap();
   }, [todayKey]);
+
+  useEffect(() => {
+    const client = getSupabase();
+    if (!client) {
+      return;
+    }
+    let active = true;
+    const syncAuth = async () => {
+      const { data } = await client.auth.getSession();
+      if (active) {
+        setIsSignedIn(Boolean(data.session));
+      }
+    };
+    void syncAuth();
+    const { data: authListener } = client.auth.onAuthStateChange((_event, nextSession) => {
+      setIsSignedIn(Boolean(nextSession));
+    });
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (!hydrated) {
@@ -188,17 +214,20 @@ export default function DietPage() {
 
   return (
     <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-36 pt-6 text-neutral-50">
-      <header>
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
-          Module 2
-        </p>
-        <div className="mt-2 flex items-center gap-2">
-          <Utensils className="h-5 w-5 text-emerald-400" />
-          <h1 className="text-2xl font-semibold tracking-tight">Diet Engine</h1>
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
+            Module 2
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <Utensils className="h-5 w-5 text-emerald-400" />
+            <h1 className="text-2xl font-semibold tracking-tight">Diet Engine</h1>
+          </div>
+          <p className="mt-2 text-sm text-neutral-400">
+            Text-only Indian meal logger. Katori, roti, plates, grams, and ml all work.
+          </p>
         </div>
-        <p className="mt-2 text-sm text-neutral-400">
-          Text-only Indian meal logger. Katori, roti, plates, grams, and ml all work.
-        </p>
+        <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
       </header>
 
       <div className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
@@ -374,6 +403,17 @@ export default function DietPage() {
                       <p className="mt-1 text-xs text-neutral-500">
                         {log.serving_inferred}
                       </p>
+                      {log.source ? (
+                        <span
+                          className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                            log.source === "gemini"
+                              ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                              : "border border-amber-400/30 bg-amber-400/10 text-amber-300"
+                          }`}
+                        >
+                          {log.source === "gemini" ? "Gemini" : "Estimate"}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300">
@@ -450,6 +490,11 @@ export default function DietPage() {
           )}
         </div>
       </section>
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onAuthChange={setIsSignedIn}
+      />
     </section>
   );
 }

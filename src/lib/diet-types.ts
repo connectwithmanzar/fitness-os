@@ -16,12 +16,15 @@ export type DietEntry = {
   micros?: Record<string, number>;
 };
 
+export type MealEstimateSource = "gemini" | "estimate";
+
 export type MealScanResult = DietEntry & {
   meal_name: string;
   serving_inferred: string;
   fiber_g: number;
   micronutrients: Micronutrients;
   breakdown_summary: string;
+  source?: MealEstimateSource;
 };
 
 export type MealLog = MealScanResult & {

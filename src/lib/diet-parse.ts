@@ -80,6 +80,11 @@ export function parseMealScanResult(
     ...micros,
   };
 
+  const source =
+    value.source === "gemini" || value.source === "estimate"
+      ? value.source
+      : undefined;
+
   return {
     meal_name: mealName,
     serving_inferred: asString(value.serving_inferred, fallbackQuery),
@@ -95,6 +100,7 @@ export function parseMealScanResult(
       value.breakdown_summary,
       "Estimated from the logged Indian meal description."
     ),
+    source,
   };
 }
 

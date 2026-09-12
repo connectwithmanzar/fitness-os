@@ -344,5 +344,6 @@ export function estimateIndianMeal(query: string): MealScanResult {
     micronutrients: micros,
     breakdown_summary:
       "Fallback Indian-diet estimate using katori, roti, sabzi, and metric portion heuristics. Recheck once Gemini is available.",
+    source: "estimate",
   };
 }

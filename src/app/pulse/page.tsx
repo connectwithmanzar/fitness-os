@@ -4,10 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Check, ChevronDown, Dumbbell, Moon } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
-import { parseMealScanResult } from "@/lib/diet-parse";
+import {
+  isSameLocalDay,
+  loadLocalMealLogs,
+  localDayKey,
+} from "@/lib/diet-storage";
 import { loadDietTargets } from "@/lib/diet-targets";
-import type { DailyMacroTargets, MealLog } from "@/lib/diet-types";
-import { DAILY_MACRO_TARGETS } from "@/lib/diet-types";
+import { DAILY_MACRO_TARGETS, type DailyMacroTargets, type MealLog } from "@/lib/diet-types";
 import {
   aggregateMealTotals,
   bedtimeHighlights,
@@ -17,10 +20,13 @@ import {
   remainingOf,
 } from "@/lib/pulse-engine";
 import { getSupabase } from "@/lib/supabaseClient";
+import {
+  completedSetCount,
+  loadWorkoutHistory,
+  totalVolumeKg,
+  type CompletedWorkout,
+} from "@/lib/workout-history";
 
-const WORKOUT_HISTORY_KEY = "workout_history";
-const DIET_LOGS_KEY = "diet_logs";
-const LOCAL_MEAL_LOGS_KEY = "local_meal_logs";
 const BEDTIME_STORAGE_KEY = "pulse_bedtime_checks";
 
 const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"] as const;
@@ -51,29 +57,6 @@ const BEDTIME_ITEMS = [
 type BedtimeId = (typeof BEDTIME_ITEMS)[number]["id"];
 type ProteinAdherence = "hit" | "partial" | "none";
 
-type HistorySet = {
-  id: string;
-  setNumber: number;
-  weightKg: string;
-  reps: string;
-  completed: boolean;
-};
-
-type HistoryExercise = {
-  id: string;
-  name: string;
-  sets: HistorySet[];
-};
-
-type CompletedWorkout = {
-  id: string;
-  name: string;
-  completedAt: string;
-  exercises: HistoryExercise[];
-};
-
-type DietLog = MealLog;
-
 type DayTrend = {
   key: string;
   label: string;
@@ -90,143 +73,6 @@ type BedtimeStore = {
   day: string;
   ids: BedtimeId[];
 };
-
-function dayKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function sameDay(iso: string, key: string): boolean {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return false;
-  }
-  return dayKey(date) === key;
-}
-
-function asString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function parseHistorySet(value: unknown): HistorySet | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const id = asString(value.id);
-  if (!id || typeof value.setNumber !== "number") {
-    return null;
-  }
-  return {
-    id,
-    setNumber: value.setNumber,
-    weightKg: typeof value.weightKg === "string" ? value.weightKg : "0",
-    reps: typeof value.reps === "string" ? value.reps : "0",
-    completed: value.completed === true,
-  };
-}
-
-function parseHistoryExercise(value: unknown): HistoryExercise | null {
-  if (!isRecord(value) || !Array.isArray(value.sets)) {
-    return null;
-  }
-  const id = asString(value.id);
-  const name = asString(value.name);
-  if (!id || !name) {
-    return null;
-  }
-  return {
-    id,
-    name,
-    sets: value.sets
-      .map(parseHistorySet)
-      .filter((set): set is HistorySet => set !== null),
-  };
-}
-
-function parseCompletedWorkout(value: unknown): CompletedWorkout | null {
-  if (!isRecord(value) || !Array.isArray(value.exercises)) {
-    return null;
-  }
-  const id = asString(value.id);
-  const name = asString(value.name);
-  const completedAt = asString(value.completedAt);
-  if (!id || !name || !completedAt) {
-    return null;
-  }
-  return {
-    id,
-    name,
-    completedAt,
-    exercises: value.exercises
-      .map(parseHistoryExercise)
-      .filter((exercise): exercise is HistoryExercise => exercise !== null),
-  };
-}
-
-function parseDietLog(value: unknown): DietLog | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const loggedAt = asString(value.logged_at) ?? asString(value.created_at);
-  if (!loggedAt) {
-    return null;
-  }
-  const query = asString(value.query) ?? asString(value.meal_name) ?? "Meal";
-  const scanned = parseMealScanResult(value, query);
-  if (!scanned) {
-    return null;
-  }
-  return {
-    ...scanned,
-    id: asString(value.id) ?? `${loggedAt}-${Math.random().toString(16).slice(2)}`,
-    query,
-    logged_at: loggedAt,
-  };
-}
-
-function readJsonArray(storageKey: string): unknown[] {
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) {
-      return [];
-    }
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function loadWorkoutHistory(): CompletedWorkout[] {
-  return readJsonArray(WORKOUT_HISTORY_KEY)
-    .map(parseCompletedWorkout)
-    .filter((entry): entry is CompletedWorkout => entry !== null)
-    .sort(
-      (left, right) =>
-        new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime()
-    );
-}
-
-function loadDietLogs(): DietLog[] {
-  const merged = [
-    ...readJsonArray(DIET_LOGS_KEY),
-    ...readJsonArray(LOCAL_MEAL_LOGS_KEY),
-  ];
-  const unique = new Map<string, DietLog>();
-  for (const item of merged) {
-    const parsed = parseDietLog(item);
-    if (parsed) {
-      unique.set(parsed.id, parsed);
-    }
-  }
-  return Array.from(unique.values());
-}
 
 function isBedtimeId(value: unknown): value is BedtimeId {
   return (
@@ -264,43 +110,18 @@ function lastSevenDays(end: Date): Date[] {
   return days;
 }
 
-function completedSetCount(workout: CompletedWorkout): number {
-  return workout.exercises.reduce(
-    (total, exercise) =>
-      total + exercise.sets.filter((set) => set.completed).length,
-    0
-  );
-}
-
-function totalVolumeKg(workout: CompletedWorkout): number {
-  return workout.exercises.reduce((total, exercise) => {
-    return (
-      total +
-      exercise.sets.reduce((setTotal, set) => {
-        if (!set.completed) {
-          return setTotal;
-        }
-        const weight = Number(set.weightKg);
-        const reps = Number(set.reps);
-        if (!Number.isFinite(weight) || !Number.isFinite(reps)) {
-          return setTotal;
-        }
-        return setTotal + weight * reps;
-      }, 0)
-    );
-  }, 0);
-}
-
 function buildWeekTrends(
   end: Date,
-  meals: DietLog[],
+  meals: MealLog[],
   workouts: CompletedWorkout[],
   proteinHitG: number
 ): DayTrend[] {
   return lastSevenDays(end).map((date) => {
-    const key = dayKey(date);
-    const dayMeals = meals.filter((log) => sameDay(log.logged_at, key));
-    const dayWorkouts = workouts.filter((entry) => sameDay(entry.completedAt, key));
+    const key = localDayKey(date);
+    const dayMeals = meals.filter((log) => isSameLocalDay(log.logged_at, key));
+    const dayWorkouts = workouts.filter((entry) =>
+      isSameLocalDay(entry.completedAt, key)
+    );
     const calories = dayMeals.reduce((sum, log) => sum + log.calories, 0);
     const protein_g = dayMeals.reduce((sum, log) => sum + log.protein_g, 0);
     const volumeKg = dayWorkouts.reduce((sum, entry) => sum + totalVolumeKg(entry), 0);
@@ -375,9 +196,9 @@ function sparklinePoints(values: number[], width: number, height: number): strin
 
 export default function PulsePage() {
   const today = useMemo(() => new Date(), []);
-  const todayKey = dayKey(today);
+  const todayKey = localDayKey(today);
   const [workouts, setWorkouts] = useState<CompletedWorkout[]>([]);
-  const [meals, setMeals] = useState<DietLog[]>([]);
+  const [meals, setMeals] = useState<MealLog[]>([]);
   const [checked, setChecked] = useState<BedtimeId[]>([]);
   const [activeTrendKey, setActiveTrendKey] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -388,14 +209,18 @@ export default function PulsePage() {
 
   useEffect(() => {
     const nextWorkouts = loadWorkoutHistory();
-    const nextMeals = loadDietLogs();
+    const nextMeals = loadLocalMealLogs();
     const storedChecks = loadBedtimeChecks(todayKey);
     setWorkouts(nextWorkouts);
     setMeals(nextMeals);
     setDietTargets(loadDietTargets());
 
-    const todaysMealLogs = nextMeals.filter((log) => sameDay(log.logged_at, todayKey));
-    const workoutDone = nextWorkouts.some((entry) => sameDay(entry.completedAt, todayKey));
+    const todaysMealLogs = nextMeals.filter((log) =>
+      isSameLocalDay(log.logged_at, todayKey)
+    );
+    const workoutDone = nextWorkouts.some((entry) =>
+      isSameLocalDay(entry.completedAt, todayKey)
+    );
     const dayTotals = aggregateMealTotals(todaysMealLogs);
     const highlights = bedtimeHighlights(dayTotals, workoutDone);
     const recommended: BedtimeId[] = [];
@@ -438,14 +263,14 @@ export default function PulsePage() {
   }, [checked, hydrated, todayKey]);
 
   const todaysWorkouts = useMemo(
-    () => workouts.filter((entry) => sameDay(entry.completedAt, todayKey)),
+    () => workouts.filter((entry) => isSameLocalDay(entry.completedAt, todayKey)),
     [todayKey, workouts]
   );
   const latestWorkout = todaysWorkouts[0] ?? null;
   const trainingCompleted = latestWorkout !== null;
 
   const todaysMeals = useMemo(
-    () => meals.filter((log) => sameDay(log.logged_at, todayKey)),
+    () => meals.filter((log) => isSameLocalDay(log.logged_at, todayKey)),
     [meals, todayKey]
   );
 
@@ -590,7 +415,9 @@ export default function PulsePage() {
       <section className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4">
         <h2 className="text-sm font-semibold">Today&apos;s Macro Overview</h2>
         <p className="mt-1 text-xs text-neutral-500">
-          DRI: 2,200 kcal • 140g Protein • 220g Carbs • 65g Fat • 35g Fiber
+          DRI: {formatAmount(dietTargets.calories)} kcal • {formatAmount(dietTargets.protein_g)}g
+          Protein • {formatAmount(dietTargets.carbs_g)}g Carbs • {formatAmount(dietTargets.fats_g)}g
+          Fat • {formatAmount(dietTargets.fiber_g)}g Fiber
         </p>
         <div className="mt-4 flex flex-col gap-4">
           {macros.map((macro) => {

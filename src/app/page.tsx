@@ -28,8 +28,10 @@ import {
 } from "@/lib/workout-history";
 import { isValidLoggedSet, pruneToValidSets, validSetCount } from "@/lib/workout-session";
 import { finishWorkoutSession } from "@/lib/workout-sync";
+import { persistLastCompletedWorkout } from "@/lib/pulse-storage";
 
 const STORAGE_KEY = "active_workout_session";
+const REST_PRESETS = [60, 90, 120] as const;
 
 type WorkoutSet = {
   id: string;
@@ -65,11 +67,68 @@ function createId(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function createSet(setNumber: number): WorkoutSet {
-  return { id: createId(), setNumber, weightKg: "", reps: "", completed: false };
+function createSet(
+  setNumber: number,
+  seed?: { weightKg: string; reps: string }
+): WorkoutSet {
+  return {
+    id: createId(),
+    setNumber,
+    weightKg: seed?.weightKg ?? "",
+    reps: seed?.reps ?? "",
+    completed: false,
+  };
 }
 
-function createExercise(exercise: LibraryExercise): WorkoutExercise {
+function previousSetValues(
+  exerciseName: string,
+  setIndex: number,
+  history: CompletedWorkout[]
+): { weightKg: string; reps: string } {
+  for (const workout of history) {
+    const match = workout.exercises.find((item) => item.name === exerciseName);
+    if (!match) {
+      continue;
+    }
+    const set = match.sets[setIndex];
+    if (set && (set.weightKg.trim() || set.reps.trim())) {
+      return { weightKg: set.weightKg, reps: set.reps };
+    }
+  }
+  for (const workout of history) {
+    const match = workout.exercises.find((item) => item.name === exerciseName);
+    if (!match) {
+      continue;
+    }
+    const last = [...match.sets].reverse().find((set) => set.weightKg.trim() || set.reps.trim());
+    if (last) {
+      return { weightKg: last.weightKg, reps: last.reps };
+    }
+  }
+  return { weightKg: "", reps: "" };
+}
+
+function defaultsForSet(
+  exerciseName: string,
+  setIndex: number,
+  history: CompletedWorkout[],
+  currentSets: WorkoutSet[] = []
+): { weightKg: string; reps: string } {
+  const fromHistory = previousSetValues(exerciseName, setIndex, history);
+  if (fromHistory.weightKg || fromHistory.reps) {
+    return fromHistory;
+  }
+  const previousRow = currentSets[setIndex - 1] ?? currentSets[currentSets.length - 1];
+  if (previousRow && (previousRow.weightKg || previousRow.reps)) {
+    return { weightKg: previousRow.weightKg, reps: previousRow.reps };
+  }
+  return { weightKg: "", reps: "" };
+}
+
+function createExercise(
+  exercise: LibraryExercise,
+  history: CompletedWorkout[]
+): WorkoutExercise {
   const setCount = Math.max(1, exercise.defaultSets);
   return {
     id: createId(),
@@ -78,18 +137,25 @@ function createExercise(exercise: LibraryExercise): WorkoutExercise {
     stillUrl: exercise.stillUrl || undefined,
     muscle: exercise.muscle,
     equipment: exercise.equipment,
-    sets: Array.from({ length: setCount }, (_, index) => createSet(index + 1)),
+    sets: Array.from({ length: setCount }, (_, index) =>
+      createSet(index + 1, defaultsForSet(exercise.name, index, history))
+    ),
   };
 }
 
-function createSession(split: WorkoutSplit): ActiveWorkoutSession {
+function createSession(
+  split: WorkoutSplit,
+  history: CompletedWorkout[]
+): ActiveWorkoutSession {
   return {
     id: createId(),
     name: split.title,
     splitId: split.id,
     startedAt: new Date().toISOString(),
     finishedAt: null,
-    exercises: exercisesForSplit(split).map(createExercise),
+    exercises: exercisesForSplit(split).map((exercise) =>
+      createExercise(exercise, history)
+    ),
   };
 }
 
@@ -144,6 +210,32 @@ function previousForSet(
   return "—";
 }
 
+function beepRestEnd(): void {
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) {
+      return;
+    }
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.value = 0.08;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.16);
+    window.setTimeout(() => {
+      void ctx.close();
+    }, 250);
+  } catch {
+    // Optional cue — skip if the browser blocks audio.
+  }
+}
+
 function resolveMuscle(exercise: WorkoutExercise): MuscleGroup {
   return exercise.muscle ?? findExerciseByName(exercise.name)?.muscle ?? "Core";
 }
@@ -157,6 +249,8 @@ export default function WorkoutPage() {
   const [banner, setBanner] = useState<string | null>(null);
   const [finishError, setFinishError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [restSeconds, setRestSeconds] = useState<(typeof REST_PRESETS)[number]>(90);
+  const [restRemaining, setRestRemaining] = useState<number | null>(null);
 
   useEffect(() => {
     try {
@@ -213,19 +307,38 @@ export default function WorkoutPage() {
     return () => window.clearTimeout(timeout);
   }, [banner]);
 
+  useEffect(() => {
+    if (restRemaining === null) {
+      return;
+    }
+    if (restRemaining <= 0) {
+      beepRestEnd();
+      setRestRemaining(null);
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setRestRemaining((current) => (current === null ? null : current - 1));
+    }, 1000);
+    return () => window.clearTimeout(timeout);
+  }, [restRemaining]);
+
   const addExercise = (exercise: LibraryExercise) => {
     setSession((current) => {
       if (!current) {
         return current;
       }
-      return { ...current, exercises: [...current.exercises, createExercise(exercise)] };
+      return {
+        ...current,
+        exercises: [...current.exercises, createExercise(exercise, history)],
+      };
     });
     setIsModalOpen(false);
   };
 
   const startSplit = (split: WorkoutSplit) => {
-    setSession(createSession(split));
+    setSession(createSession(split, history));
     setFinishError(null);
+    setRestRemaining(null);
   };
 
   const cancelWorkout = () => {
@@ -233,6 +346,7 @@ export default function WorkoutPage() {
     setSession(null);
     setFinishError(null);
     setIsModalOpen(false);
+    setRestRemaining(null);
   };
 
   const finishSession = async () => {
@@ -252,8 +366,10 @@ export default function WorkoutPage() {
       exercises: validExercises,
     };
     setHistory(appendWorkoutHistory(completed));
+    persistLastCompletedWorkout(completedAt);
+    let synced = false;
     try {
-      await finishWorkoutSession({
+      synced = await finishWorkoutSession({
         id: completed.id,
         name: completed.name,
         splitId: session.splitId,
@@ -265,12 +381,13 @@ export default function WorkoutPage() {
         })),
       });
     } catch {
-      // Local history is already saved.
+      synced = false;
     }
     window.localStorage.removeItem(STORAGE_KEY);
     setSession(null);
     setFinishError(null);
-    setBanner("Workout Saved to History!");
+    setRestRemaining(null);
+    setBanner(synced ? "Workout saved + synced" : "Workout saved locally");
   };
 
   if (!hydrated) {
@@ -326,6 +443,57 @@ export default function WorkoutPage() {
         </div>
       ) : null}
       {finishError ? <p className="mt-3 text-xs text-amber-400">{finishError}</p> : null}
+
+      {session ? (
+        <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                Rest timer
+              </p>
+              <p className="mt-0.5 font-mono text-lg font-semibold text-white">
+                {restRemaining === null
+                  ? `${restSeconds}s`
+                  : `${Math.floor(restRemaining / 60)}:${String(restRemaining % 60).padStart(2, "0")}`}
+              </p>
+            </div>
+            <div className="flex gap-1.5">
+              {REST_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => {
+                    setRestSeconds(preset);
+                    if (restRemaining !== null) {
+                      setRestRemaining(preset);
+                    }
+                  }}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                    restSeconds === preset
+                      ? "bg-emerald-500 text-black"
+                      : "border border-neutral-700 text-neutral-300"
+                  }`}
+                >
+                  {preset}s
+                </button>
+              ))}
+            </div>
+          </div>
+          {restRemaining !== null ? (
+            <button
+              type="button"
+              onClick={() => setRestRemaining(null)}
+              className="mt-2 text-xs text-neutral-500 underline-offset-4 hover:text-neutral-300 hover:underline"
+            >
+              Skip rest
+            </button>
+          ) : (
+            <p className="mt-2 text-[11px] text-neutral-500">
+              Starts automatically when you complete a set.
+            </p>
+          )}
+        </div>
+      ) : null}
 
       <div className="mt-6">
         {!session ? (
@@ -481,7 +649,32 @@ export default function WorkoutPage() {
                     />
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
+                        if (set.completed) {
+                          setSession((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  exercises: current.exercises.map((item) =>
+                                    item.id === exercise.id
+                                      ? {
+                                          ...item,
+                                          sets: item.sets.map((row) =>
+                                            row.id === set.id
+                                              ? { ...row, completed: false }
+                                              : row
+                                          ),
+                                        }
+                                      : item
+                                  ),
+                                }
+                              : current
+                          );
+                          return;
+                        }
+                        if (!isValidLoggedSet({ ...set, completed: true })) {
+                          return;
+                        }
                         setSession((current) =>
                           current
                             ? {
@@ -490,24 +683,19 @@ export default function WorkoutPage() {
                                   item.id === exercise.id
                                     ? {
                                         ...item,
-                                        sets: item.sets.map((row) => {
-                                          if (row.id !== set.id) {
-                                            return row;
-                                          }
-                                          if (row.completed) {
-                                            return { ...row, completed: false };
-                                          }
-                                          return isValidLoggedSet({ ...row, completed: true })
+                                        sets: item.sets.map((row) =>
+                                          row.id === set.id
                                             ? { ...row, completed: true }
-                                            : row;
-                                        }),
+                                            : row
+                                        ),
                                       }
                                     : item
                                 ),
                               }
                             : current
-                        )
-                      }
+                        );
+                        setRestRemaining(restSeconds);
+                      }}
                       className={`flex h-9 w-9 items-center justify-center rounded-full border ${
                         set.completed
                           ? "border-emerald-500 bg-emerald-500 text-black"
@@ -529,7 +717,21 @@ export default function WorkoutPage() {
                           ...current,
                           exercises: current.exercises.map((item) =>
                             item.id === exercise.id
-                              ? { ...item, sets: [...item.sets, createSet(item.sets.length + 1)] }
+                              ? {
+                                  ...item,
+                                  sets: [
+                                    ...item.sets,
+                                    createSet(
+                                      item.sets.length + 1,
+                                      defaultsForSet(
+                                        item.name,
+                                        item.sets.length,
+                                        history,
+                                        item.sets
+                                      )
+                                    ),
+                                  ],
+                                }
                               : item
                           ),
                         }

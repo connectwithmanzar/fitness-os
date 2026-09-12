@@ -96,7 +96,7 @@ function isMealScanRequest(value: unknown): value is MealScanRequest {
 }
 
 function fallbackResult(query: string): MealScanResult {
-  return estimateIndianMeal(query);
+  return { ...estimateIndianMeal(query), source: "estimate" };
 }
 
 async function generateWithTimeout(
@@ -148,7 +148,7 @@ export async function POST(request: Request) {
         const text = await generateWithTimeout(ai, model, query);
         const parsed = parseMealScanText(text, query);
         if (parsed) {
-          return NextResponse.json(parsed, { status: 200 });
+          return NextResponse.json({ ...parsed, source: "gemini" }, { status: 200 });
         }
       } catch {
         continue;
