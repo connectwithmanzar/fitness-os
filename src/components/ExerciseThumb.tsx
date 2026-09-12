@@ -94,7 +94,7 @@ export function ExerciseThumb({
       src={src}
       alt={`${name} demonstration`}
       loading={eager ? "eager" : "lazy"}
-      className={`bg-neutral-900 ${className ?? ""}`}
+      className={className}
       onError={() => {
         if (stage === "gif" && stillUrl && stillUrl !== gifUrl) {
           setStage("still");

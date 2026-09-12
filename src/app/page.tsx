@@ -35,7 +35,6 @@ import { isValidLoggedSet, pruneToValidSets, validSetCount } from "@/lib/workout
 import { finishWorkoutSession } from "@/lib/workout-sync";
 import { persistLastCompletedWorkout } from "@/lib/pulse-storage";
 import { notifyFitnessDataChanged, notifyWorkoutSessionChanged } from "@/lib/fitness-events";
-import { InstallAppHint } from "@/components/InstallAppHint";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { AppBanner } from "@/components/ui/AppBanner";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -679,7 +678,6 @@ export default function WorkoutPage() {
             subtitle={`${weekdayName} — today is ${todayPlan.title}`}
             action={<AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />}
           />
-          <InstallAppHint />
         </>
       )}
 
@@ -826,16 +824,17 @@ export default function WorkoutPage() {
             const hint = overloadHint(exercise.name, history);
             return (
             <article key={exercise.id} className="card">
-              <div className="row top between">
-                <div className="row grow">
-                  <ExerciseThumb
-                    name={exercise.name}
-                    muscle={muscle}
-                    gifUrl={exercise.gifUrl ?? catalog?.gifUrl ?? ""}
-                    stillUrl={exercise.stillUrl ?? catalog?.stillUrl}
-                    className="thumb"
-                  />
-                  <div className="grow">
+              <div className="exmedia">
+                <ExerciseThumb
+                  name={exercise.name}
+                  muscle={muscle}
+                  gifUrl={exercise.gifUrl ?? catalog?.gifUrl ?? ""}
+                  stillUrl={exercise.stillUrl ?? catalog?.stillUrl}
+                  eager
+                />
+              </div>
+              <div className="row between">
+                <div className="grow">
                     <p className="tt" style={{ color: "var(--label)", margin: 0 }}>
                       {exercise.name}
                     </p>
@@ -848,7 +847,6 @@ export default function WorkoutPage() {
                       ) : null}
                       {hint ? <span className="tag">{hint}</span> : null}
                     </div>
-                  </div>
                 </div>
                 <button
                   type="button"
@@ -868,9 +866,9 @@ export default function WorkoutPage() {
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-              <div className="sethead" style={{ marginTop: 10 }}>
+              <div className="sethead">
                 <span className="n-sp">Set</span>
-                <span className="w-sp">kg</span>
+                <span className="w-sp">Weight</span>
                 <span className="r-sp">Reps</span>
                 <span className="ck-sp" />
               </div>

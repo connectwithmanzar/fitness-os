@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNav } from "@/components/layout/BottomNav";
 import "./globals.css";
+import "../../vendor/opengym/index.css";
+import "@/styles/opengym-adapt.css";
 
 export const metadata: Metadata = {
   title: "Fitness OS",

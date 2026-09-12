@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Activity, Play, Square, Utensils } from "lucide-react";
+import { Dumbbell, House, Utensils } from "lucide-react";
 import { FITNESS_DATA_CHANGED_EVENT, WORKOUT_SESSION_CHANGED_EVENT } from "@/lib/fitness-events";
 
 const SESSION_KEY = "active_workout_session";
@@ -52,7 +52,7 @@ export function BottomNav() {
   return (
     <nav id="tabbar" aria-label="Primary">
       <Link href="/pulse" prefetch className={todayOn ? "on" : undefined}>
-        <Activity className="icn" strokeWidth={todayOn ? 2 : 1.65} />
+        <House className="icn" strokeWidth={todayOn ? 2 : 1.65} />
         Today
       </Link>
       <Link
@@ -61,11 +61,7 @@ export function BottomNav() {
         className={`start ${recording ? "rec" : ""} ${trainOn ? "on" : ""}`}
       >
         <span className="cir" aria-hidden="true">
-          {recording ? (
-            <Square className="icn" strokeWidth={2} />
-          ) : (
-            <Play className="icn" strokeWidth={2} />
-          )}
+          <Dumbbell className="icn" strokeWidth={2} />
         </span>
         <span>{recording ? "Session" : "Train"}</span>
       </Link>

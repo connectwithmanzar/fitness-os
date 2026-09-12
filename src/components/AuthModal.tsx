@@ -254,6 +254,16 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
 
         <InstallAppHint placement="account" />
 
+        <p className="oss-note">
+          <a
+            href="https://github.com/connectwithmanzar/fitness-os"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open source (AGPL) · based on openGym
+          </a>
+        </p>
+
         <div className="card" style={{ marginTop: 20 }}>
           <h2>Local backup</h2>
           <p className="t-foot">

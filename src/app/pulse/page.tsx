@@ -4,10 +4,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
+  CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Dumbbell,
+  Flame,
   Moon,
   Utensils,
 } from "lucide-react";
@@ -178,7 +180,7 @@ function buildWeekTrends(
 }
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -186,27 +188,47 @@ function formatDate(date: Date): string {
 }
 
 const BW_KEY = "fitness_os_bodyweight";
+const BW_LOG_KEY = "fitness_os_bodyweight_log";
 
 type BodyWeightEntry = { w: number; d: string };
 
-function loadBodyWeight(): BodyWeightEntry | null {
-  try {
-    const raw = window.localStorage.getItem(BW_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as BodyWeightEntry;
-    if (typeof parsed.w !== "number" || !parsed.d) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
+function isBodyWeightEntry(value: unknown): value is BodyWeightEntry {
+  if (typeof value !== "object" || value === null) {
+    return false;
   }
+  const row = value as BodyWeightEntry;
+  return typeof row.w === "number" && typeof row.d === "string";
+}
+
+function loadBodyWeightLog(): BodyWeightEntry[] {
+  try {
+    const raw = window.localStorage.getItem(BW_LOG_KEY);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(isBodyWeightEntry).slice(-30);
+      }
+    }
+    const legacy = window.localStorage.getItem(BW_KEY);
+    if (!legacy) {
+      return [];
+    }
+    const parsed: unknown = JSON.parse(legacy);
+    return isBodyWeightEntry(parsed) ? [parsed] : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadBodyWeight(): BodyWeightEntry | null {
+  const log = loadBodyWeightLog();
+  return log[log.length - 1] ?? null;
 }
 
 function saveBodyWeight(w: number): BodyWeightEntry {
   const entry: BodyWeightEntry = { w, d: new Date().toISOString() };
+  const next = [...loadBodyWeightLog(), entry].slice(-30);
+  window.localStorage.setItem(BW_LOG_KEY, JSON.stringify(next));
   window.localStorage.setItem(BW_KEY, JSON.stringify(entry));
   return entry;
 }
@@ -349,6 +371,7 @@ export default function PulsePage() {
   const [dietTargets, setDietTargets] = useState<DailyMacroTargets>(DAILY_MACRO_TARGETS);
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [bodyWeight, setBodyWeight] = useState<BodyWeightEntry | null>(null);
+  const [bodyWeightLog, setBodyWeightLog] = useState<BodyWeightEntry[]>([]);
   const [loggingWeight, setLoggingWeight] = useState(false);
   const [draftWeight, setDraftWeight] = useState("");
   const [liveName, setLiveName] = useState<string | null>(null);
@@ -362,6 +385,7 @@ export default function PulsePage() {
     setMeals(nextMeals);
     setDietTargets(loadDietTargets());
     setBodyWeight(loadBodyWeight());
+    setBodyWeightLog(loadBodyWeightLog());
     setLiveName(liveSessionName());
 
     const storedChecks = loadBedtimeChecks(todayKey);
@@ -483,6 +507,11 @@ export default function PulsePage() {
     weekTrends.map((day) => day.calories),
     84,
     28
+  );
+  const weightSpark = sparklinePoints(
+    bodyWeightLog.map((entry) => entry.w),
+    320,
+    72
   );
 
   const gaps = {
@@ -640,6 +669,20 @@ export default function PulsePage() {
         ) : (
           <p className="muted">No entries yet — log your weight to start the curve.</p>
         )}
+        {bodyWeightLog.length > 1 ? (
+          <div className="chart" aria-hidden="true">
+            <svg viewBox="0 0 320 72" preserveAspectRatio="none">
+              <polyline
+                fill="none"
+                stroke="var(--acc)"
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                points={weightSpark}
+              />
+            </svg>
+          </div>
+        ) : null}
         {loggingWeight ? (
           <form
             className="fields"
@@ -650,6 +693,7 @@ export default function PulsePage() {
                 return;
               }
               setBodyWeight(saveBodyWeight(next));
+              setBodyWeightLog(loadBodyWeightLog());
               setLoggingWeight(false);
             }}
           >
@@ -670,14 +714,22 @@ export default function PulsePage() {
       </div>
 
       <button type="button" className="card tappable" onClick={() => setMoreOpen(true)}>
-        <p>
-          <span className="big">{weeksStreak}</span>
-          <span className="unit">week streak</span>
-        </p>
-        <p className="muted">
-          {thisWeekCount} / 3 this week · {workouts.length}{" "}
-          {workouts.length === 1 ? "workout" : "workouts"} total
-        </p>
+        <div className="row between">
+          <div>
+            <p>
+              <span className="big">{weeksStreak}</span>
+              <span className="unit">week streak</span>
+            </p>
+            <p className="muted">
+              {thisWeekCount} / 3 this week · {workouts.length}{" "}
+              {workouts.length === 1 ? "workout" : "workouts"} total
+            </p>
+          </div>
+          <span className="streak-affordance" aria-hidden="true">
+            <Flame className="icn" />
+            <CalendarDays className="icn" />
+          </span>
+        </div>
       </button>
 
       <button
