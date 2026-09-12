@@ -1,10 +1,14 @@
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabaseClient";
 import type { ActiveWorkoutSession, WorkoutSet } from "@/lib/workout-types";
-import { parseOptionalNumber } from "@/lib/workout-session";
+import { parseOptionalNumber, isValidLoggedSet } from "@/lib/workout-session";
 
 async function getUserId(): Promise<string | null> {
+  const client = getSupabase();
+  if (!client) {
+    return null;
+  }
   try {
-    const { data, error } = await supabase.auth.getUser();
+    const { data, error } = await client.auth.getUser();
     if (error || !data.user) {
       return null;
     }
@@ -18,7 +22,12 @@ export async function upsertWorkoutSession(
   session: ActiveWorkoutSession,
   userId: string
 ): Promise<void> {
-  const { error } = await supabase.from("workout_sessions").upsert(
+  const client = getSupabase();
+  if (!client) {
+    return;
+  }
+
+  const { error } = await client.from("workout_sessions").upsert(
     {
       id: session.id,
       user_id: userId,
@@ -39,7 +48,12 @@ export async function upsertCompletedSet(
   exerciseName: string,
   set: WorkoutSet
 ): Promise<void> {
-  const { error } = await supabase.from("exercise_logs").upsert(
+  const client = getSupabase();
+  if (!client) {
+    return;
+  }
+
+  const { error } = await client.from("exercise_logs").upsert(
     {
       id: set.id,
       session_id: sessionId,
@@ -85,13 +99,17 @@ export async function finishWorkoutSession(
     finishedAt: session.finishedAt ?? new Date().toISOString(),
   };
 
-  await upsertWorkoutSession(finished, userId);
-
   const completedSets = finished.exercises.flatMap((exercise) =>
     exercise.sets
-      .filter((set) => set.completed)
+      .filter((set) => isValidLoggedSet(set))
       .map((set) => ({ exerciseName: exercise.name, set }))
   );
+
+  if (completedSets.length === 0) {
+    return false;
+  }
+
+  await upsertWorkoutSession(finished, userId);
 
   for (const entry of completedSets) {
     await upsertCompletedSet(
@@ -108,13 +126,18 @@ export async function finishWorkoutSession(
 export async function fetchTodayWorkoutLogged(
   dayStartIso: string
 ): Promise<boolean | null> {
+  const client = getSupabase();
+  if (!client) {
+    return null;
+  }
+
   try {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const { data: userData, error: userError } = await client.auth.getUser();
     if (userError || !userData.user) {
       return null;
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from("workout_sessions")
       .select("id, started_at, completed_at")
       .eq("user_id", userData.user.id)

@@ -20,6 +20,7 @@ function resolveAnonKey(): string | null {
 }
 
 let browserClient: SupabaseClient | null = null;
+let missingKeysWarned = false;
 
 export function getSupabase(): SupabaseClient | null {
   if (browserClient) {
@@ -30,18 +31,15 @@ export function getSupabase(): SupabaseClient | null {
   const anonKey = resolveAnonKey();
 
   if (!url || !anonKey) {
-    console.warn(
-      "Supabase URL or anon key is missing. Auth and cloud sync stay in guest/offline mode."
-    );
+    if (!missingKeysWarned) {
+      missingKeysWarned = true;
+      console.warn(
+        "Supabase URL or anon key is missing. Auth and cloud sync stay in guest/offline mode."
+      );
+    }
     return null;
   }
 
   browserClient = createClient(url, anonKey);
   return browserClient;
 }
-
-const fallbackUrl = "https://placeholder.supabase.co";
-const fallbackKey = "public-anon-key";
-
-export const supabase: SupabaseClient =
-  getSupabase() ?? createClient(fallbackUrl, fallbackKey);

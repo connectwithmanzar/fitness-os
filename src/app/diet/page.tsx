@@ -16,7 +16,8 @@ import {
   insertRemoteMealLog,
 } from "@/lib/diet-sync";
 import { DAILY_MACRO_TARGETS, fiberFromEntry } from "@/lib/diet-types";
-import type { DietEntry, MealLog, MealScanResult } from "@/lib/diet-types";
+import type { DailyMacroTargets, DietEntry, MealLog, MealScanResult } from "@/lib/diet-types";
+import { loadDietTargets, persistDietTargets } from "@/lib/diet-targets";
 
 const SHORTCUTS = [
   "+ 1 Katori Dal",
@@ -58,18 +59,34 @@ export default function DietPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [targets, setTargets] = useState<DailyMacroTargets>(DAILY_MACRO_TARGETS);
+  const [draftTargets, setDraftTargets] = useState<DailyMacroTargets>(DAILY_MACRO_TARGETS);
+  const [editingTargets, setEditingTargets] = useState(false);
   const todayKey = localDayKey(new Date());
 
   useEffect(() => {
     const bootstrap = async () => {
+      const local = loadLocalMealLogs().filter((log) =>
+        isSameLocalDay(log.logged_at, todayKey)
+      );
       const remote = await fetchRemoteMealLogs(startOfLocalDayIso(new Date()));
-      if (remote) {
-        setLogs(remote);
-      } else {
-        setLogs(
-          loadLocalMealLogs().filter((log) => isSameLocalDay(log.logged_at, todayKey))
-        );
+      const merged = new Map<string, MealLog>();
+      for (const log of local) {
+        merged.set(log.id, log);
       }
+      if (remote) {
+        for (const log of remote) {
+          merged.set(log.id, log);
+        }
+      }
+      setLogs(
+        Array.from(merged.values()).sort((a, b) =>
+          b.logged_at.localeCompare(a.logged_at)
+        )
+      );
+      const savedTargets = loadDietTargets();
+      setTargets(savedTargets);
+      setDraftTargets(savedTargets);
       setHydrated(true);
     };
 
@@ -91,11 +108,25 @@ export default function DietPage() {
           protein_g: acc.protein_g + log.protein_g,
           carbs_g: acc.carbs_g + log.carbs_g,
           fats_g: acc.fats_g + log.fats_g,
+          fiber_g: acc.fiber_g + fiberFromEntry(log),
         }),
-        { calories: 0, protein_g: 0, carbs_g: 0, fats_g: 0 }
+        { calories: 0, protein_g: 0, carbs_g: 0, fats_g: 0, fiber_g: 0 }
       ),
     [logs]
   );
+
+  const saveTargets = () => {
+    const next = {
+      calories: Math.max(1, Number(draftTargets.calories) || DAILY_MACRO_TARGETS.calories),
+      protein_g: Math.max(1, Number(draftTargets.protein_g) || DAILY_MACRO_TARGETS.protein_g),
+      carbs_g: Math.max(1, Number(draftTargets.carbs_g) || DAILY_MACRO_TARGETS.carbs_g),
+      fats_g: Math.max(1, Number(draftTargets.fats_g) || DAILY_MACRO_TARGETS.fats_g),
+      fiber_g: Math.max(1, Number(draftTargets.fiber_g) || DAILY_MACRO_TARGETS.fiber_g),
+    };
+    setTargets(next);
+    persistDietTargets(next);
+    setEditingTargets(false);
+  };
 
   const logMeal = useCallback(async () => {
     const trimmed = query.trim();
@@ -170,31 +201,103 @@ export default function DietPage() {
         </p>
       </header>
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <SummaryCard
-          label="Calories"
-          value={`${formatNumber(totals.calories)}`}
-          unit="kcal"
-          target={DAILY_MACRO_TARGETS.calories}
-        />
-        <SummaryCard
-          label="Protein"
-          value={formatNumber(totals.protein_g, 1)}
-          unit="g"
-          target={DAILY_MACRO_TARGETS.protein_g}
-        />
-        <SummaryCard
-          label="Carbs"
-          value={formatNumber(totals.carbs_g, 1)}
-          unit="g"
-          target={DAILY_MACRO_TARGETS.carbs_g}
-        />
-        <SummaryCard
-          label="Fats"
-          value={formatNumber(totals.fats_g, 1)}
-          unit="g"
-          target={DAILY_MACRO_TARGETS.fats_g}
-        />
+      <div className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+              Daily Blueprint
+            </p>
+            <p className="mt-1 text-sm text-neutral-300">
+              {formatNumber(targets.calories)} kcal • {formatNumber(targets.protein_g, 0)}P •{" "}
+              {formatNumber(targets.carbs_g, 0)}C • {formatNumber(targets.fats_g, 0)}F •{" "}
+              {formatNumber(targets.fiber_g, 0)}g fiber
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setDraftTargets(targets);
+              setEditingTargets((open) => !open);
+            }}
+            className="rounded-lg border border-neutral-800 px-2.5 py-1 text-xs font-semibold text-neutral-300"
+          >
+            {editingTargets ? "Close" : "Edit"}
+          </button>
+        </div>
+
+        {editingTargets ? (
+          <form
+            className="mt-4 grid grid-cols-2 gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveTargets();
+            }}
+          >
+            {(
+              [
+                ["calories", "kcal"],
+                ["protein_g", "Protein"],
+                ["carbs_g", "Carbs"],
+                ["fats_g", "Fat"],
+                ["fiber_g", "Fiber"],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="text-[11px] text-neutral-500">
+                {label}
+                <input
+                  inputMode="decimal"
+                  value={draftTargets[key]}
+                  onChange={(event) =>
+                    setDraftTargets((current) => ({
+                      ...current,
+                      [key]: Number(event.target.value) || 0,
+                    }))
+                  }
+                  className="mt-1 h-10 w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 text-sm text-white outline-none focus:border-emerald-500"
+                />
+              </label>
+            ))}
+            <button
+              type="submit"
+              className="col-span-2 mt-1 rounded-xl bg-emerald-500 py-2.5 text-sm font-semibold text-black"
+            >
+              Save targets
+            </button>
+          </form>
+        ) : null}
+
+        <div className="mt-4 flex flex-col gap-3">
+          {(
+            [
+              { label: "Calories", consumed: totals.calories, target: targets.calories, unit: "kcal" },
+              { label: "Protein", consumed: totals.protein_g, target: targets.protein_g, unit: "g" },
+              { label: "Carbs", consumed: totals.carbs_g, target: targets.carbs_g, unit: "g" },
+              { label: "Fat", consumed: totals.fats_g, target: targets.fats_g, unit: "g" },
+              { label: "Fiber", consumed: totals.fiber_g, target: targets.fiber_g, unit: "g" },
+            ] as const
+          ).map((row) => {
+            const percent = row.target > 0 ? Math.min(100, Math.round((row.consumed / row.target) * 100)) : 0;
+            const barTone =
+              percent >= 80 ? "bg-emerald-500" : percent >= 40 ? "bg-amber-400" : "bg-red-500";
+            return (
+              <div key={row.label}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-neutral-300">{row.label}</span>
+                  <span className="font-mono text-neutral-400">
+                    {formatNumber(row.consumed, row.unit === "kcal" ? 0 : 1)} /{" "}
+                    {formatNumber(row.target)} {row.unit} • {percent}%
+                  </span>
+                </div>
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-neutral-800">
+                  <div
+                    className={`h-full rounded-full ${barTone}`}
+                    style={{ width: `${percent}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div className="mt-6 rounded-2xl border border-neutral-800 bg-neutral-900/70 p-4">
@@ -348,30 +451,5 @@ export default function DietPage() {
         </div>
       </section>
     </section>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  unit,
-  target,
-}: {
-  label: string;
-  value: string;
-  unit: string;
-  target: number;
-}) {
-  return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-900/80 p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
-        {label}
-      </p>
-      <p className="mt-1 text-xl font-semibold tracking-tight">
-        {value}
-        <span className="ml-1 text-xs font-medium text-neutral-500">{unit}</span>
-      </p>
-      <p className="mt-1 text-[11px] text-neutral-500">/ {formatNumber(target)}</p>
-    </div>
   );
 }

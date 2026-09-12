@@ -96,3 +96,46 @@ export function parseOptionalNumber(value: string): number | null {
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
 }
+
+export function isValidLoggedSet(set: {
+  completed: boolean;
+  weightKg: string;
+  reps: string;
+}): boolean {
+  if (!set.completed) {
+    return false;
+  }
+  const reps = parseOptionalNumber(set.reps);
+  if (reps === null || reps <= 0) {
+    return false;
+  }
+  const weightRaw = set.weightKg.trim();
+  if (weightRaw.length === 0) {
+    return true;
+  }
+  const weight = parseOptionalNumber(weightRaw);
+  return weight !== null && weight >= 0;
+}
+
+export function validSetCount(
+  exercises: Array<{ sets: Array<{ completed: boolean; weightKg: string; reps: string }> }>
+): number {
+  return exercises.reduce(
+    (total, exercise) =>
+      total + exercise.sets.filter((set) => isValidLoggedSet(set)).length,
+    0
+  );
+}
+
+export function pruneToValidSets<T extends { sets: WorkoutSet[] }>(exercises: T[]): T[] {
+  return exercises
+    .map((exercise) => ({
+      ...exercise,
+      sets: exercise.sets.filter((set) => isValidLoggedSet(set)),
+    }))
+    .filter((exercise) => exercise.sets.length > 0)
+    .map((exercise) => ({
+      ...exercise,
+      sets: exercise.sets.map((set, index) => ({ ...set, setNumber: index + 1 })),
+    }));
+}

@@ -19,6 +19,8 @@ export type WorkoutExercise = {
 
 export type ActiveWorkoutSession = {
   id: string;
+  name?: string;
+  splitId?: string;
   startedAt: string;
   finishedAt: string | null;
   exercises: WorkoutExercise[];

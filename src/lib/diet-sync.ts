@@ -1,9 +1,13 @@
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabaseClient";
 import type { MealLog } from "@/lib/diet-types";
 
 async function getUserId(): Promise<string | null> {
+  const client = getSupabase();
+  if (!client) {
+    return null;
+  }
   try {
-    const { data, error } = await supabase.auth.getUser();
+    const { data, error } = await client.auth.getUser();
     if (error || !data.user) {
       return null;
     }
@@ -93,7 +97,12 @@ export async function fetchRemoteMealLogs(dayStartIso: string): Promise<MealLog[
     return null;
   }
 
-  const { data, error } = await supabase
+  const client = getSupabase();
+  if (!client) {
+    return null;
+  }
+
+  const { data, error } = await client
     .from("meal_logs")
     .select("*")
     .eq("user_id", userId)
@@ -115,7 +124,12 @@ export async function insertRemoteMealLog(log: MealLog): Promise<boolean> {
     return false;
   }
 
-  const { error } = await supabase.from("meal_logs").insert(toRow(log, userId));
+  const client = getSupabase();
+  if (!client) {
+    return false;
+  }
+
+  const { error } = await client.from("meal_logs").insert(toRow(log, userId));
   return !error;
 }
 
@@ -125,7 +139,12 @@ export async function deleteRemoteMealLog(id: string): Promise<boolean> {
     return false;
   }
 
-  const { error } = await supabase
+  const client = getSupabase();
+  if (!client) {
+    return false;
+  }
+
+  const { error } = await client
     .from("meal_logs")
     .delete()
     .eq("id", id)

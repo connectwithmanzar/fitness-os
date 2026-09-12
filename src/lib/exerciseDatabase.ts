@@ -110,6 +110,10 @@ export function findExerciseByName(name: string): LibraryExercise | undefined {
   return EXERCISE_DATABASE.find((exercise) => exercise.name.toLowerCase() === needle);
 }
 
+export function findExerciseById(id: string): LibraryExercise | undefined {
+  return EXERCISE_DATABASE.find((exercise) => exercise.id === id);
+}
+
 export function filterExerciseDatabase(
   query: string,
   muscle: MuscleGroup | "All",

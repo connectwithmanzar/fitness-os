@@ -1,9 +1,3 @@
-export const PULSE_CALORIE_TARGET = 2200;
-export const PULSE_PROTEIN_TARGET_G = 140;
-export const PULSE_CARBS_TARGET_G = 220;
-export const PULSE_FATS_TARGET_G = 65;
-export const PULSE_FIBER_TARGET_G = 35;
-
 export const PULSE_MICRO_TARGETS = {
   iron_mg: 18,
   calcium_mg: 1000,

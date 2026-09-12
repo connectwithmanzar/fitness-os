@@ -12,6 +12,11 @@ import {
 } from "@/lib/exerciseDatabase";
 import { getSupabase } from "@/lib/supabaseClient";
 import {
+  exercisesForSplit,
+  WORKOUT_SPLITS,
+  type WorkoutSplit,
+} from "@/lib/workout-splits";
+import {
   appendWorkoutHistory,
   completedSetCount,
   formatHistoryTimestamp,
@@ -21,6 +26,7 @@ import {
   totalVolumeKg,
   type CompletedWorkout,
 } from "@/lib/workout-history";
+import { isValidLoggedSet, pruneToValidSets, validSetCount } from "@/lib/workout-session";
 import { finishWorkoutSession } from "@/lib/workout-sync";
 
 const STORAGE_KEY = "active_workout_session";
@@ -45,6 +51,8 @@ type WorkoutExercise = {
 
 type ActiveWorkoutSession = {
   id: string;
+  name?: string;
+  splitId?: string;
   startedAt: string;
   finishedAt: string | null;
   exercises: WorkoutExercise[];
@@ -74,8 +82,15 @@ function createExercise(exercise: LibraryExercise): WorkoutExercise {
   };
 }
 
-function createSession(): ActiveWorkoutSession {
-  return { id: createId(), startedAt: new Date().toISOString(), finishedAt: null, exercises: [] };
+function createSession(split: WorkoutSplit): ActiveWorkoutSession {
+  return {
+    id: createId(),
+    name: split.title,
+    splitId: split.id,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    exercises: exercisesForSplit(split).map(createExercise),
+  };
 }
 
 function isSession(value: unknown): value is ActiveWorkoutSession {
@@ -86,9 +101,13 @@ function isSession(value: unknown): value is ActiveWorkoutSession {
   return typeof record.id === "string" && Array.isArray(record.exercises);
 }
 
-function sessionName(exercises: WorkoutExercise[]): string {
+function sessionName(session: ActiveWorkoutSession): string {
+  const labeled = session.name?.trim() ?? "";
+  if (labeled.length > 0 && session.splitId !== "empty") {
+    return labeled;
+  }
   const groups = new Set<MuscleGroup>();
-  for (const exercise of exercises) {
+  for (const exercise of session.exercises) {
     const muscle = exercise.muscle ?? findExerciseByName(exercise.name)?.muscle;
     if (muscle) {
       groups.add(muscle);
@@ -98,7 +117,7 @@ function sessionName(exercises: WorkoutExercise[]): string {
     return "Chest Workout Session";
   }
   const [first] = Array.from(groups);
-  return first ? `${first} Workout Session` : "Workout Session";
+  return first ? `${first} Workout Session` : session.name || "Workout Session";
 }
 
 function previousForSet(
@@ -144,12 +163,12 @@ export default function WorkoutPage() {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed: unknown = JSON.parse(raw);
-        setSession(isSession(parsed) && !parsed.finishedAt ? parsed : createSession());
+        setSession(isSession(parsed) && !parsed.finishedAt ? parsed : null);
       } else {
-        setSession(createSession());
+        setSession(null);
       }
     } catch {
-      setSession(createSession());
+      setSession(null);
     }
     setHistory(loadWorkoutHistory());
     setHydrated(true);
@@ -176,7 +195,11 @@ export default function WorkoutPage() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated || !session) {
+    if (!hydrated) {
+      return;
+    }
+    if (!session) {
+      window.localStorage.removeItem(STORAGE_KEY);
       return;
     }
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
@@ -192,31 +215,51 @@ export default function WorkoutPage() {
 
   const addExercise = (exercise: LibraryExercise) => {
     setSession((current) => {
-      const base = current ?? createSession();
-      return { ...base, exercises: [...base.exercises, createExercise(exercise)] };
+      if (!current) {
+        return current;
+      }
+      return { ...current, exercises: [...current.exercises, createExercise(exercise)] };
     });
     setIsModalOpen(false);
   };
 
+  const startSplit = (split: WorkoutSplit) => {
+    setSession(createSession(split));
+    setFinishError(null);
+  };
+
+  const cancelWorkout = () => {
+    window.localStorage.removeItem(STORAGE_KEY);
+    setSession(null);
+    setFinishError(null);
+    setIsModalOpen(false);
+  };
+
   const finishSession = async () => {
-    if (!session || session.exercises.length === 0) {
-      setFinishError("Add at least one exercise before finishing.");
+    if (!session) {
+      return;
+    }
+    const validExercises = pruneToValidSets(session.exercises);
+    if (validSetCount(session.exercises) === 0 || validExercises.length === 0) {
+      setFinishError("Complete at least one set with reps (weight optional for bodyweight).");
       return;
     }
     const completedAt = new Date().toISOString();
     const completed: CompletedWorkout = {
       id: createId(),
-      name: sessionName(session.exercises),
+      name: sessionName({ ...session, exercises: validExercises }),
       completedAt,
-      exercises: session.exercises,
+      exercises: validExercises,
     };
     setHistory(appendWorkoutHistory(completed));
     try {
       await finishWorkoutSession({
         id: completed.id,
+        name: completed.name,
+        splitId: session.splitId,
         startedAt: session.startedAt,
         finishedAt: completedAt,
-        exercises: session.exercises.map((exercise) => ({
+        exercises: validExercises.map((exercise) => ({
           ...exercise,
           previousSetLabel: "—",
         })),
@@ -225,18 +268,20 @@ export default function WorkoutPage() {
       // Local history is already saved.
     }
     window.localStorage.removeItem(STORAGE_KEY);
-    setSession(createSession());
+    setSession(null);
     setFinishError(null);
     setBanner("Workout Saved to History!");
   };
 
-  if (!session) {
+  if (!hydrated) {
     return (
       <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-36 pt-6 text-white">
         <p className="text-sm text-neutral-500">Loading workout…</p>
       </section>
     );
   }
+
+  const canFinish = session ? validSetCount(session.exercises) > 0 : false;
 
   return (
     <section className="mx-auto min-h-screen max-w-md overflow-x-hidden bg-neutral-950 px-4 pb-36 pt-6 font-sans text-white">
@@ -251,22 +296,27 @@ export default function WorkoutPage() {
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">Workout</h1>
-            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400">
-              ACTIVE WORKOUT
-            </span>
+            {session ? (
+              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400">
+                {sessionName(session)}
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
           <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
-          <button
-            type="button"
-            onClick={() => {
-              void finishSession();
-            }}
-            className="rounded-xl bg-emerald-500 px-3.5 py-2 text-sm font-semibold text-black transition active:scale-98"
-          >
-            Finish Session
-          </button>
+          {session ? (
+            <button
+              type="button"
+              disabled={!canFinish}
+              onClick={() => {
+                void finishSession();
+              }}
+              className="rounded-xl bg-emerald-500 px-3.5 py-2 text-sm font-semibold text-black transition active:scale-98 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500"
+            >
+              Finish Workout
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -278,7 +328,29 @@ export default function WorkoutPage() {
       {finishError ? <p className="mt-3 text-xs text-amber-400">{finishError}</p> : null}
 
       <div className="mt-6">
-        {session.exercises.length === 0 ? (
+        {!session ? (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold">Start a session</h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              Pick a split to pre-load compounds, or start empty and add lifts yourself.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {WORKOUT_SPLITS.map((split) => (
+                <button
+                  key={split.id}
+                  type="button"
+                  onClick={() => startSplit(split)}
+                  className={`rounded-2xl border border-neutral-800 bg-neutral-900 p-4 text-left transition hover:border-emerald-500/50 active:scale-98 ${
+                    split.id === "empty" ? "col-span-2" : ""
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-white">{split.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-neutral-500">{split.detail}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : session.exercises.length === 0 ? (
           <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/90 p-4 text-center text-sm text-neutral-300">
             No exercises yet. Tap below to add a movement.
           </div>
@@ -418,11 +490,17 @@ export default function WorkoutPage() {
                                   item.id === exercise.id
                                     ? {
                                         ...item,
-                                        sets: item.sets.map((row) =>
-                                          row.id === set.id
-                                            ? { ...row, completed: !row.completed }
-                                            : row
-                                        ),
+                                        sets: item.sets.map((row) => {
+                                          if (row.id !== set.id) {
+                                            return row;
+                                          }
+                                          if (row.completed) {
+                                            return { ...row, completed: false };
+                                          }
+                                          return isValidLoggedSet({ ...row, completed: true })
+                                            ? { ...row, completed: true }
+                                            : row;
+                                        }),
                                       }
                                     : item
                                 ),
@@ -468,14 +546,25 @@ export default function WorkoutPage() {
           })
         )}
 
-        <button
-          type="button"
-          onClick={() => setIsModalOpen(true)}
-          className="mb-10 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-700 bg-neutral-900/40 py-3.5 font-semibold text-neutral-300 transition hover:border-emerald-500 active:scale-98"
-        >
-          <Plus className="h-4 w-4" />
-          + Add Exercise
-        </button>
+        {session ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-700 bg-neutral-900/40 py-3.5 font-semibold text-neutral-300 transition hover:border-emerald-500 active:scale-98"
+            >
+              <Plus className="h-4 w-4" />
+              + Add Exercise
+            </button>
+            <button
+              type="button"
+              onClick={cancelWorkout}
+              className="mb-10 w-full py-2 text-sm font-medium text-neutral-500 underline-offset-4 hover:text-red-400 hover:underline"
+            >
+              Cancel Workout
+            </button>
+          </>
+        ) : null}
       </div>
 
       <section className="pb-6">
@@ -528,11 +617,13 @@ export default function WorkoutPage() {
         )}
       </section>
 
-      <ExerciseSelectorModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSelect={addExercise}
-      />
+      {session ? (
+        <ExerciseSelectorModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onSelect={addExercise}
+        />
+      ) : null}
 
       <AuthModal
         isOpen={isAuthOpen}

@@ -5,14 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Activity, Check, ChevronDown, Dumbbell, Moon } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
 import { parseMealScanResult } from "@/lib/diet-parse";
-import type { MealLog } from "@/lib/diet-types";
-import {
-  PULSE_CALORIE_TARGET,
-  PULSE_CARBS_TARGET_G,
-  PULSE_FATS_TARGET_G,
-  PULSE_FIBER_TARGET_G,
-  PULSE_PROTEIN_TARGET_G,
-} from "@/lib/pulse-baselines";
+import { loadDietTargets } from "@/lib/diet-targets";
+import type { DailyMacroTargets, MealLog } from "@/lib/diet-types";
+import { DAILY_MACRO_TARGETS } from "@/lib/diet-types";
 import {
   aggregateMealTotals,
   bedtimeHighlights,
@@ -27,15 +22,6 @@ const WORKOUT_HISTORY_KEY = "workout_history";
 const DIET_LOGS_KEY = "diet_logs";
 const LOCAL_MEAL_LOGS_KEY = "local_meal_logs";
 const BEDTIME_STORAGE_KEY = "pulse_bedtime_checks";
-const PROTEIN_HIT_G = 120;
-
-const TARGETS = {
-  calories: PULSE_CALORIE_TARGET,
-  protein_g: PULSE_PROTEIN_TARGET_G,
-  carbs_g: PULSE_CARBS_TARGET_G,
-  fats_g: PULSE_FATS_TARGET_G,
-  fiber_g: PULSE_FIBER_TARGET_G,
-} as const;
 
 const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"] as const;
 
@@ -308,7 +294,8 @@ function totalVolumeKg(workout: CompletedWorkout): number {
 function buildWeekTrends(
   end: Date,
   meals: DietLog[],
-  workouts: CompletedWorkout[]
+  workouts: CompletedWorkout[],
+  proteinHitG: number
 ): DayTrend[] {
   return lastSevenDays(end).map((date) => {
     const key = dayKey(date);
@@ -324,7 +311,7 @@ function buildWeekTrends(
     const hasFood = dayMeals.length > 0;
     const proteinAdherence: ProteinAdherence = !hasFood
       ? "none"
-      : protein_g >= PROTEIN_HIT_G
+      : protein_g >= proteinHitG
         ? "hit"
         : "partial";
 
@@ -397,6 +384,7 @@ export default function PulsePage() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [auditOpen, setAuditOpen] = useState(true);
+  const [dietTargets, setDietTargets] = useState<DailyMacroTargets>(DAILY_MACRO_TARGETS);
 
   useEffect(() => {
     const nextWorkouts = loadWorkoutHistory();
@@ -404,6 +392,7 @@ export default function PulsePage() {
     const storedChecks = loadBedtimeChecks(todayKey);
     setWorkouts(nextWorkouts);
     setMeals(nextMeals);
+    setDietTargets(loadDietTargets());
 
     const todaysMealLogs = nextMeals.filter((log) => sameDay(log.logged_at, todayKey));
     const workoutDone = nextWorkouts.some((entry) => sameDay(entry.completedAt, todayKey));
@@ -461,11 +450,17 @@ export default function PulsePage() {
   );
 
   const totals = useMemo(() => aggregateMealTotals(todaysMeals), [todaysMeals]);
-  const macros = useMemo(() => buildMacroProgress(totals), [totals]);
-  const microAudit = useMemo(() => buildMicroMarkers(totals), [totals]);
+  const macros = useMemo(
+    () => buildMacroProgress(totals, dietTargets),
+    [dietTargets, totals]
+  );
+  const microAudit = useMemo(
+    () => buildMicroMarkers(totals, dietTargets),
+    [dietTargets, totals]
+  );
   const recommendations = useMemo(
-    () => buildSmartRecommendations(totals, trainingCompleted),
-    [totals, trainingCompleted]
+    () => buildSmartRecommendations(totals, trainingCompleted, dietTargets),
+    [dietTargets, totals, trainingCompleted]
   );
   const recoveryFlags = useMemo(
     () => bedtimeHighlights(totals, trainingCompleted),
@@ -473,8 +468,8 @@ export default function PulsePage() {
   );
 
   const weekTrends = useMemo(
-    () => buildWeekTrends(today, meals, workouts),
-    [meals, today, workouts]
+    () => buildWeekTrends(today, meals, workouts, dietTargets.protein_g * 0.85),
+    [dietTargets.protein_g, meals, today, workouts]
   );
   const maxVolume = Math.max(...weekTrends.map((day) => day.volumeKg), 0);
   const hasWeekActivity = weekTrends.some((day) => day.workoutCompleted || day.hasFood);
@@ -486,22 +481,30 @@ export default function PulsePage() {
   );
 
   const gaps = {
-    calories: remainingOf(totals.calories, TARGETS.calories),
-    protein_g: remainingOf(totals.protein_g, TARGETS.protein_g),
-    carbs_g: remainingOf(totals.carbs_g, TARGETS.carbs_g),
-    fats_g: remainingOf(totals.fats_g, TARGETS.fats_g),
-    fiber_g: remainingOf(totals.fiber_g, TARGETS.fiber_g),
+    calories: remainingOf(totals.calories, dietTargets.calories),
+    protein_g: remainingOf(totals.protein_g, dietTargets.protein_g),
+    carbs_g: remainingOf(totals.carbs_g, dietTargets.carbs_g),
+    fats_g: remainingOf(totals.fats_g, dietTargets.fats_g),
+    fiber_g: remainingOf(totals.fiber_g, dietTargets.fiber_g),
   };
+  const proteinTarget = dietTargets.protein_g;
+  const proteinRatio = totals.protein_g / proteinTarget;
+  const proteinDeficit = proteinRatio < 0.7;
+  const fiberDeficit = totals.fiber_g < dietTargets.fiber_g * 0.7;
   const workoutSets = latestWorkout ? completedSetCount(latestWorkout) : 0;
   const highIntensity =
     trainingCompleted &&
     (workoutSets >= 12 || (latestWorkout ? totalVolumeKg(latestWorkout) >= 2500 : false));
 
-  const readiness = Math.round(
-    (macros.reduce((sum, item) => sum + percent(item.consumed, item.target), 0) /
-      macros.length) *
-      0.7 +
-      (trainingCompleted ? 30 : 0)
+  const readiness = Math.min(
+    100,
+    Math.round(
+      (macros.reduce((sum, item) => sum + percent(item.consumed, item.target), 0) /
+        Math.max(macros.length, 1)) *
+        0.55 +
+        (trainingCompleted ? 25 : 0) +
+        (checked.length / BEDTIME_ITEMS.length) * 20
+    )
   );
 
   const toggleCheck = (id: BedtimeId) => {
@@ -833,8 +836,31 @@ export default function PulsePage() {
           <h2 className="text-sm font-semibold">Bedtime Prescription</h2>
         </div>
         <p className="mt-1 text-xs text-neutral-500">
-          Recovery checklist persisted locally for tonight.
+          Recovery stack tied to today&apos;s training and macros. Checking items lifts readiness.
         </p>
+
+        {proteinDeficit ? (
+          <article className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-red-300">
+              Protein Deficit Detected
+            </p>
+            <p className="mt-1 text-xs leading-5 text-red-100/90">
+              You are at {formatAmount(totals.protein_g, 1)}g / {formatAmount(proteinTarget)}g (
+              {Math.round(proteinRatio * 100)}%). Take 1 Scoop Whey or 200g Greek Yogurt/Paneer.
+            </p>
+          </article>
+        ) : null}
+
+        {fiberDeficit ? (
+          <article className="mt-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">
+              Fiber Deficit
+            </p>
+            <p className="mt-1 text-xs leading-5 text-amber-100/90">
+              {formatAmount(totals.fiber_g, 1)}g logged. Take 2 tbsp Isabgol / Chia Seeds before bed.
+            </p>
+          </article>
+        ) : null}
         <div className="mt-4 flex flex-col gap-3">
           {BEDTIME_ITEMS.map((item) => {
             const isChecked = checked.includes(item.id);
@@ -871,8 +897,12 @@ export default function PulsePage() {
                       >
                         {item.title}
                       </h3>
-                      {(item.id === "magnesium" && recoveryFlags.magnesium) ||
-                      (item.id === "electrolytes" && recoveryFlags.electrolytes) ? (
+                      {item.id === "magnesium" && trainingCompleted ? (
+                        <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300">
+                          CRITICAL: Muscle Repair &amp; CNS Recovery Active
+                        </span>
+                      ) : (item.id === "magnesium" && recoveryFlags.magnesium) ||
+                        (item.id === "electrolytes" && recoveryFlags.electrolytes) ? (
                         <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
                           {isChecked ? "Stacked" : "Recommended"}
                         </span>

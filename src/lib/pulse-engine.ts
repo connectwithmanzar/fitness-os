@@ -1,12 +1,11 @@
-import { EMPTY_MICRONUTRIENTS, fiberFromEntry, type MealLog } from "@/lib/diet-types";
 import {
-  PULSE_CALORIE_TARGET,
-  PULSE_CARBS_TARGET_G,
-  PULSE_FATS_TARGET_G,
-  PULSE_FIBER_TARGET_G,
-  PULSE_MICRO_TARGETS,
-  PULSE_PROTEIN_TARGET_G,
-} from "@/lib/pulse-baselines";
+  DAILY_MACRO_TARGETS,
+  EMPTY_MICRONUTRIENTS,
+  fiberFromEntry,
+  type DailyMacroTargets,
+  type MealLog,
+} from "@/lib/diet-types";
+import { PULSE_MICRO_TARGETS } from "@/lib/pulse-baselines";
 import type {
   MacroProgress,
   MicroMarker,
@@ -73,41 +72,44 @@ export function progressTone(percent: number): ProgressTone {
   return "red";
 }
 
-export function buildMacroProgress(totals: PulseTotals): MacroProgress[] {
+export function buildMacroProgress(
+  totals: PulseTotals,
+  targets: DailyMacroTargets = DAILY_MACRO_TARGETS
+): MacroProgress[] {
   const rows: Array<Omit<MacroProgress, "percent" | "tone">> = [
     {
       id: "calories",
       label: "Calories",
       consumed: totals.calories,
-      target: PULSE_CALORIE_TARGET,
+      target: targets.calories,
       unit: "kcal",
     },
     {
       id: "protein",
       label: "Protein",
       consumed: totals.protein_g,
-      target: PULSE_PROTEIN_TARGET_G,
+      target: targets.protein_g,
       unit: "g",
     },
     {
       id: "carbs",
       label: "Carbs",
       consumed: totals.carbs_g,
-      target: PULSE_CARBS_TARGET_G,
+      target: targets.carbs_g,
       unit: "g",
     },
     {
       id: "fats",
       label: "Fats",
       consumed: totals.fats_g,
-      target: PULSE_FATS_TARGET_G,
+      target: targets.fats_g,
       unit: "g",
     },
     {
       id: "fiber",
       label: "Fiber",
       consumed: totals.fiber_g,
-      target: PULSE_FIBER_TARGET_G,
+      target: targets.fiber_g,
       unit: "g",
     },
   ];
@@ -118,14 +120,17 @@ export function buildMacroProgress(totals: PulseTotals): MacroProgress[] {
   });
 }
 
-export function buildMicroMarkers(totals: PulseTotals): MicroMarker[] {
+export function buildMicroMarkers(
+  totals: PulseTotals,
+  targets: DailyMacroTargets = DAILY_MACRO_TARGETS
+): MicroMarker[] {
   const markers: Array<Omit<MicroMarker, "percent" | "deficient">> = [
     {
       id: "fiber_g",
       name: "Fiber",
       focus: "Digestive load",
       consumed: totals.fiber_g,
-      target: PULSE_FIBER_TARGET_G,
+      target: targets.fiber_g,
       unit: "g",
     },
     {
@@ -178,17 +183,18 @@ function mealsMentionOmega3(logs: MealLog[]): boolean {
 
 export function buildSmartRecommendations(
   totals: PulseTotals,
-  workoutCompleted: boolean
+  workoutCompleted: boolean,
+  targets: DailyMacroTargets = DAILY_MACRO_TARGETS
 ): SmartRecommendation[] {
   const recommendations: SmartRecommendation[] = [];
-  const fiberRemaining = remainingOf(totals.fiber_g, PULSE_FIBER_TARGET_G);
-  const proteinRemaining = remainingOf(totals.protein_g, PULSE_PROTEIN_TARGET_G);
+  const fiberRemaining = remainingOf(totals.fiber_g, targets.fiber_g);
+  const proteinRemaining = remainingOf(totals.protein_g, targets.protein_g);
   const magnesiumRemaining = remainingOf(
     totals.micronutrients.magnesium_mg,
     PULSE_MICRO_TARGETS.magnesium_mg
   );
 
-  if (fiberRemaining > 15) {
+  if (fiberRemaining > targets.fiber_g * 0.3) {
     recommendations.push({
       id: "fiber",
       badge: `Fiber Gap: ${Math.round(fiberRemaining)}g short`,
@@ -197,7 +203,7 @@ export function buildSmartRecommendations(
     });
   }
 
-  if (proteinRemaining > 30) {
+  if (proteinRemaining > targets.protein_g * 0.2) {
     recommendations.push({
       id: "protein",
       badge: `Protein Gap: ${Math.round(proteinRemaining)}g short`,
@@ -233,13 +239,14 @@ export function bedtimeHighlights(
 
 export function buildSupplementPrescriptions(
   totals: PulseTotals,
-  logs: MealLog[]
+  logs: MealLog[],
+  targets: DailyMacroTargets = DAILY_MACRO_TARGETS
 ): SupplementPrescription[] {
   const prescriptions: SupplementPrescription[] = [];
-  const proteinGap = PULSE_PROTEIN_TARGET_G - totals.protein_g;
-  const fiberGap = PULSE_FIBER_TARGET_G - totals.fiber_g;
+  const proteinGap = targets.protein_g - totals.protein_g;
+  const fiberGap = targets.fiber_g - totals.fiber_g;
 
-  if (fiberGap > 15) {
+  if (fiberGap > targets.fiber_g * 0.3) {
     prescriptions.push({
       id: "fiber",
       name: "Chia / Isabgol",
@@ -248,7 +255,7 @@ export function buildSupplementPrescriptions(
     });
   }
 
-  if (proteinGap > 30) {
+  if (proteinGap > targets.protein_g * 0.2) {
     prescriptions.push({
       id: "whey",
       name: "Whey Isolate",
