@@ -31,6 +31,7 @@ import {
 import { isValidLoggedSet, pruneToValidSets, validSetCount } from "@/lib/workout-session";
 import { finishWorkoutSession } from "@/lib/workout-sync";
 import { persistLastCompletedWorkout } from "@/lib/pulse-storage";
+import { notifyFitnessDataChanged } from "@/lib/fitness-events";
 import { InstallAppHint } from "@/components/InstallAppHint";
 import { PageSkeleton } from "@/components/PageSkeleton";
 
@@ -413,6 +414,7 @@ export default function WorkoutPage() {
     };
     setHistory(appendWorkoutHistory(completed));
     persistLastCompletedWorkout(completedAt);
+    notifyFitnessDataChanged();
     let synced = false;
     try {
       synced = await finishWorkoutSession({

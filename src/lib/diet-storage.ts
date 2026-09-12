@@ -1,6 +1,7 @@
 import { parseMealScanResult } from "@/lib/diet-parse";
 import { LOCAL_MEAL_LOGS_KEY } from "@/lib/diet-types";
 import type { MealLog } from "@/lib/diet-types";
+import { notifyFitnessDataChanged } from "@/lib/fitness-events";
 
 const LEGACY_DIET_LOGS_KEY = "diet_logs";
 
@@ -101,6 +102,31 @@ export function persistLocalMealLogs(logs: MealLog[]): void {
     return;
   }
   window.localStorage.setItem(LOCAL_MEAL_LOGS_KEY, JSON.stringify(logs));
+}
+
+function sortMealLogs(logs: MealLog[]): MealLog[] {
+  return [...logs].sort((left, right) => right.logged_at.localeCompare(left.logged_at));
+}
+
+export function upsertLocalMealLogs(logs: MealLog[]): MealLog[] {
+  const merged = new Map<string, MealLog>();
+  for (const log of loadLocalMealLogs()) {
+    merged.set(log.id, log);
+  }
+  for (const log of logs) {
+    merged.set(log.id, log);
+  }
+  const next = sortMealLogs(Array.from(merged.values()));
+  persistLocalMealLogs(next);
+  notifyFitnessDataChanged();
+  return next;
+}
+
+export function removeLocalMealLog(id: string): MealLog[] {
+  const next = loadLocalMealLogs().filter((log) => log.id !== id);
+  persistLocalMealLogs(next);
+  notifyFitnessDataChanged();
+  return next;
 }
 
 export function localDayKey(date: Date): string {

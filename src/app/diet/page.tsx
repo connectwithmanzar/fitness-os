@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Loader2, Trash2, Utensils } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { parseMealScanResult } from "@/lib/diet-parse";
 import {
   createMealId,
   isSameLocalDay,
   loadLocalMealLogs,
   localDayKey,
-  persistLocalMealLogs,
+  removeLocalMealLog,
+  upsertLocalMealLogs,
 } from "@/lib/diet-storage";
 import {
   deleteRemoteMealLog,
@@ -20,7 +22,7 @@ import { DAILY_MACRO_TARGETS, fiberFromEntry } from "@/lib/diet-types";
 import type { DailyMacroTargets, DietEntry, MealLog, MealScanResult } from "@/lib/diet-types";
 import { loadDietTargets, persistDietTargets } from "@/lib/diet-targets";
 import { getSupabase } from "@/lib/supabaseClient";
-import { PageSkeleton } from "@/components/PageSkeleton";
+import { useReloadLocalFitnessData } from "@/hooks/useReloadLocalFitnessData";
 
 const SHORTCUTS = [
   "+ 1 Katori Dal",
@@ -49,10 +51,24 @@ function formatNumber(value: number, digits = 0): string {
   });
 }
 
+function todaysMealLogs(todayKey: string): MealLog[] {
+  return loadLocalMealLogs()
+    .filter((log) => isSameLocalDay(log.logged_at, todayKey))
+    .sort((left, right) => right.logged_at.localeCompare(left.logged_at));
+}
+
 function startOfLocalDayIso(date: Date): string {
   const start = new Date(date);
   start.setHours(0, 0, 0, 0);
   return start.toISOString();
+}
+
+async function readJsonBody(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }
 
 export default function DietPage() {
@@ -67,13 +83,15 @@ export default function DietPage() {
   const [editingTargets, setEditingTargets] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [banner, setBanner] = useState<string | null>(null);
   const todayKey = localDayKey(new Date());
+  const dataTick = useReloadLocalFitnessData();
+  const editingTargetsRef = useRef(editingTargets);
+  editingTargetsRef.current = editingTargets;
 
   useEffect(() => {
     const bootstrap = async () => {
-      const local = loadLocalMealLogs().filter((log) =>
-        isSameLocalDay(log.logged_at, todayKey)
-      );
+      const local = todaysMealLogs(todayKey);
       const remote = await fetchRemoteMealLogs(startOfLocalDayIso(new Date()));
       const merged = new Map<string, MealLog>();
       for (const log of local) {
@@ -84,19 +102,35 @@ export default function DietPage() {
           merged.set(log.id, log);
         }
       }
-      setLogs(
-        Array.from(merged.values()).sort((a, b) =>
-          b.logged_at.localeCompare(a.logged_at)
-        )
+      const todayMerged = Array.from(merged.values()).sort((a, b) =>
+        b.logged_at.localeCompare(a.logged_at)
       );
-      const savedTargets = loadDietTargets();
-      setTargets(savedTargets);
-      setDraftTargets(savedTargets);
+      if (todayMerged.length > 0) {
+        upsertLocalMealLogs(todayMerged);
+      }
+      setLogs(todaysMealLogs(todayKey));
+      if (!editingTargetsRef.current) {
+        const savedTargets = loadDietTargets();
+        setTargets(savedTargets);
+        setDraftTargets(savedTargets);
+      }
       setHydrated(true);
     };
 
     void bootstrap();
   }, [todayKey]);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+    setLogs(todaysMealLogs(todayKey));
+    if (!editingTargetsRef.current) {
+      const savedTargets = loadDietTargets();
+      setTargets(savedTargets);
+      setDraftTargets(savedTargets);
+    }
+  }, [dataTick, hydrated, todayKey]);
 
   useEffect(() => {
     const client = getSupabase();
@@ -121,11 +155,12 @@ export default function DietPage() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) {
+    if (!banner) {
       return;
     }
-    persistLocalMealLogs(logs);
-  }, [hydrated, logs]);
+    const timeout = window.setTimeout(() => setBanner(null), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [banner]);
 
   const totals = useMemo(
     () =>
@@ -171,8 +206,13 @@ export default function DietPage() {
         body: JSON.stringify({ query: trimmed }),
       });
 
-      const payload: unknown = await response.json();
-      const scanned: MealScanResult | null = parseMealScanResult(payload, trimmed);
+      const payload = await readJsonBody(response);
+      let scanned: MealScanResult | null = null;
+      try {
+        scanned = parseMealScanResult(payload, trimmed);
+      } catch {
+        scanned = null;
+      }
 
       if (!scanned) {
         setError("Could not read that meal. Try a shorter description.");
@@ -186,23 +226,27 @@ export default function DietPage() {
         logged_at: new Date().toISOString(),
       };
 
-      setLogs((current) => [nextLog, ...current]);
+      upsertLocalMealLogs([nextLog]);
+      setLogs(todaysMealLogs(todayKey));
       setQuery("");
 
+      let synced = false;
       try {
-        await insertRemoteMealLog(nextLog);
+        synced = await insertRemoteMealLog(nextLog);
       } catch {
-        // Local persistence already covers unauthenticated testing.
+        synced = false;
       }
+      setBanner(synced ? "Meal saved · Synced" : "Meal saved · Saved on this phone");
     } catch {
-      setError("Meal saved locally after a network hiccup. Try again if totals look off.");
+      setError("Could not log that meal. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
-  }, [loading, query]);
+  }, [loading, query, todayKey]);
 
   const removeLog = useCallback(async (id: string) => {
-    setLogs((current) => current.filter((log) => log.id !== id));
+    removeLocalMealLog(id);
+    setLogs(todaysMealLogs(todayKey));
     if (expandedId === id) {
       setExpandedId(null);
     }
@@ -211,7 +255,7 @@ export default function DietPage() {
     } catch {
       // Keep the local delete even if remote delete is unavailable.
     }
-  }, [expandedId]);
+  }, [expandedId, todayKey]);
 
   if (!hydrated) {
     return <PageSkeleton />;
@@ -234,6 +278,12 @@ export default function DietPage() {
         </div>
         <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
       </header>
+
+      {banner ? (
+        <div className="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2.5 text-sm font-medium text-emerald-300">
+          {banner}
+        </div>
+      ) : null}
 
       <div className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
         <div className="flex items-start justify-between gap-3">

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Check, ChevronDown, Dumbbell, Moon } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
 import {
@@ -27,6 +27,7 @@ import {
   type CompletedWorkout,
 } from "@/lib/workout-history";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { useReloadLocalFitnessData } from "@/hooks/useReloadLocalFitnessData";
 
 const BEDTIME_STORAGE_KEY = "pulse_bedtime_checks";
 
@@ -84,19 +85,19 @@ function isBedtimeId(value: unknown): value is BedtimeId {
   );
 }
 
-function loadBedtimeChecks(today: string): BedtimeId[] {
+function loadBedtimeChecks(today: string): BedtimeId[] | null {
   try {
     const raw = window.localStorage.getItem(BEDTIME_STORAGE_KEY);
     if (!raw) {
-      return [];
+      return null;
     }
     const parsed = JSON.parse(raw) as BedtimeStore;
     if (parsed.day !== today || !Array.isArray(parsed.ids)) {
-      return [];
+      return null;
     }
     return parsed.ids.filter(isBedtimeId);
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -271,33 +272,43 @@ export default function PulsePage() {
   const [auditOpen, setAuditOpen] = useState(true);
   const [dietTargets, setDietTargets] = useState<DailyMacroTargets>(DAILY_MACRO_TARGETS);
   const [copiedSummary, setCopiedSummary] = useState(false);
+  const dataTick = useReloadLocalFitnessData();
+  const bedtimeSeededDayRef = useRef<string | null>(null);
 
   useEffect(() => {
     const nextWorkouts = loadWorkoutHistory();
     const nextMeals = loadLocalMealLogs();
-    const storedChecks = loadBedtimeChecks(todayKey);
     setWorkouts(nextWorkouts);
     setMeals(nextMeals);
     setDietTargets(loadDietTargets());
 
-    const todaysMealLogs = nextMeals.filter((log) =>
-      isSameLocalDay(log.logged_at, todayKey)
-    );
-    const workoutDone = nextWorkouts.some((entry) =>
-      isSameLocalDay(entry.completedAt, todayKey)
-    );
-    const dayTotals = aggregateMealTotals(todaysMealLogs);
-    const highlights = bedtimeHighlights(dayTotals, workoutDone);
-    const recommended: BedtimeId[] = [];
-    if (highlights.magnesium) {
-      recommended.push("magnesium");
+    const storedChecks = loadBedtimeChecks(todayKey);
+    if (storedChecks !== null) {
+      setChecked(storedChecks);
+      bedtimeSeededDayRef.current = todayKey;
+    } else if (bedtimeSeededDayRef.current !== todayKey) {
+      const todaysMealLogs = nextMeals.filter((log) =>
+        isSameLocalDay(log.logged_at, todayKey)
+      );
+      const workoutDone = nextWorkouts.some((entry) =>
+        isSameLocalDay(entry.completedAt, todayKey)
+      );
+      const dayTotals = aggregateMealTotals(todaysMealLogs);
+      const highlights = bedtimeHighlights(dayTotals, workoutDone);
+      const recommended: BedtimeId[] = [];
+      if (highlights.magnesium) {
+        recommended.push("magnesium");
+      }
+      if (highlights.electrolytes) {
+        recommended.push("electrolytes");
+      }
+      setChecked(recommended);
+      bedtimeSeededDayRef.current = todayKey;
     }
-    if (highlights.electrolytes) {
-      recommended.push("electrolytes");
-    }
-    setChecked(storedChecks.length === 0 ? recommended : storedChecks);
     setHydrated(true);
+  }, [dataTick, todayKey]);
 
+  useEffect(() => {
     const client = getSupabase();
     if (!client) {
       return;
@@ -317,7 +328,7 @@ export default function PulsePage() {
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, [todayKey]);
+  }, []);
 
   useEffect(() => {
     if (!hydrated) {

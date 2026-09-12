@@ -61,47 +61,51 @@ export function parseMealScanResult(
   value: unknown,
   fallbackQuery: string
 ): MealScanResult | null {
-  if (!isRecord(value)) {
+  try {
+    if (!isRecord(value)) {
+      return null;
+    }
+
+    const mealName = asString(value.meal_name, fallbackQuery);
+    if (mealName.length === 0) {
+      return null;
+    }
+
+    const fiber = pickNumber(value, ["fiber", "fiber_g"]);
+    const micros = parseMicros(
+      isRecord(value.micros) ? value.micros : value.micronutrients,
+      value
+    );
+    const safeMicros: Micronutrients = {
+      ...EMPTY_MICRONUTRIENTS,
+      ...micros,
+    };
+
+    const source =
+      value.source === "gemini" || value.source === "estimate"
+        ? value.source
+        : undefined;
+
+    return {
+      meal_name: mealName,
+      serving_inferred: asString(value.serving_inferred, fallbackQuery),
+      calories: asNumber(value.calories),
+      protein_g: pickNumber(value, ["protein_g", "protein"]),
+      carbs_g: pickNumber(value, ["carbs_g", "carbs"]),
+      fats_g: pickNumber(value, ["fats_g", "fat", "fats"]),
+      fiber,
+      fiber_g: Number.isFinite(fiber) ? fiber : 0,
+      micros: toMicrosRecord(safeMicros),
+      micronutrients: safeMicros,
+      breakdown_summary: asString(
+        value.breakdown_summary,
+        "Estimated from the logged Indian meal description."
+      ),
+      source,
+    };
+  } catch {
     return null;
   }
-
-  const mealName = asString(value.meal_name, fallbackQuery);
-  if (mealName.length === 0) {
-    return null;
-  }
-
-  const fiber = pickNumber(value, ["fiber", "fiber_g"]);
-  const micros = parseMicros(
-    isRecord(value.micros) ? value.micros : value.micronutrients,
-    value
-  );
-  const safeMicros: Micronutrients = {
-    ...EMPTY_MICRONUTRIENTS,
-    ...micros,
-  };
-
-  const source =
-    value.source === "gemini" || value.source === "estimate"
-      ? value.source
-      : undefined;
-
-  return {
-    meal_name: mealName,
-    serving_inferred: asString(value.serving_inferred, fallbackQuery),
-    calories: asNumber(value.calories),
-    protein_g: pickNumber(value, ["protein_g", "protein"]),
-    carbs_g: pickNumber(value, ["carbs_g", "carbs"]),
-    fats_g: pickNumber(value, ["fats_g", "fat", "fats"]),
-    fiber,
-    fiber_g: Number.isFinite(fiber) ? fiber : 0,
-    micros: toMicrosRecord(safeMicros),
-    micronutrients: safeMicros,
-    breakdown_summary: asString(
-      value.breakdown_summary,
-      "Estimated from the logged Indian meal description."
-    ),
-    source,
-  };
 }
 
 export function parseMealScanText(

@@ -2,8 +2,10 @@ import {
   DAILY_MACRO_TARGETS,
   type DailyMacroTargets,
 } from "@/lib/diet-types";
+import { notifyFitnessDataChanged } from "@/lib/fitness-events";
 
 export const DIET_TARGETS_STORAGE_KEY = "diet_targets";
+export const DIET_TARGETS_UPDATED_AT_KEY = "diet_targets_updated_at";
 
 function asPositiveNumber(value: unknown, fallback: number): number {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
@@ -51,8 +53,8 @@ export function persistDietTargets(targets: DailyMacroTargets): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(
-    DIET_TARGETS_STORAGE_KEY,
-    JSON.stringify(normalizeDietTargets(targets))
-  );
+  const normalized = normalizeDietTargets(targets);
+  window.localStorage.setItem(DIET_TARGETS_STORAGE_KEY, JSON.stringify(normalized));
+  window.localStorage.setItem(DIET_TARGETS_UPDATED_AT_KEY, new Date().toISOString());
+  notifyFitnessDataChanged();
 }
