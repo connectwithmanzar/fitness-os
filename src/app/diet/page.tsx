@@ -20,6 +20,7 @@ import { DAILY_MACRO_TARGETS, fiberFromEntry } from "@/lib/diet-types";
 import type { DailyMacroTargets, DietEntry, MealLog, MealScanResult } from "@/lib/diet-types";
 import { loadDietTargets, persistDietTargets } from "@/lib/diet-targets";
 import { getSupabase } from "@/lib/supabaseClient";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 const SHORTCUTS = [
   "+ 1 Katori Dal",
@@ -212,9 +213,13 @@ export default function DietPage() {
     }
   }, [expandedId]);
 
+  if (!hydrated) {
+    return <PageSkeleton />;
+  }
+
   return (
-    <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-36 pt-6 text-neutral-50">
-      <header className="flex items-start justify-between gap-3">
+    <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-36 text-neutral-50">
+      <header className="sticky top-0 z-40 -mx-4 mb-1 flex items-start justify-between gap-3 border-b border-neutral-800 bg-neutral-950/95 px-4 py-3 backdrop-blur-md">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
             Module 2
@@ -248,7 +253,7 @@ export default function DietPage() {
               setDraftTargets(targets);
               setEditingTargets((open) => !open);
             }}
-            className="rounded-lg border border-neutral-800 px-2.5 py-1 text-xs font-semibold text-neutral-300"
+            className="tap-target min-h-12 rounded-xl border border-neutral-800 px-3 text-sm font-semibold text-neutral-300 transition active:scale-95"
           >
             {editingTargets ? "Close" : "Edit"}
           </button>
@@ -282,13 +287,13 @@ export default function DietPage() {
                       [key]: Number(event.target.value) || 0,
                     }))
                   }
-                  className="mt-1 h-10 w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 text-sm text-white outline-none focus:border-emerald-500"
+                  className="mt-1 min-h-12 w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 text-base text-white outline-none focus:border-emerald-500"
                 />
               </label>
             ))}
             <button
               type="submit"
-              className="col-span-2 mt-1 rounded-xl bg-emerald-500 py-2.5 text-sm font-semibold text-black"
+              className="tap-target col-span-2 mt-1 min-h-12 rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-black transition active:scale-95"
             >
               Save targets
             </button>
@@ -339,7 +344,7 @@ export default function DietPage() {
           onChange={(event) => setQuery(event.target.value)}
           rows={4}
           placeholder="e.g., 250g paneer bhurji, 2 roti, and 1 katori dal or 300ml whole milk..."
-          className="mt-3 w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-3 text-sm text-neutral-50 outline-none transition placeholder:text-neutral-600 focus:border-emerald-500"
+          className="mt-3 w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-3 text-base text-neutral-50 outline-none transition placeholder:text-neutral-600 focus:border-emerald-500"
         />
 
         <div className="mt-3 flex flex-wrap gap-2">
@@ -348,7 +353,7 @@ export default function DietPage() {
               key={chip}
               type="button"
               onClick={() => setQuery((current) => appendShortcut(current, chip))}
-              className="rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-xs font-medium text-neutral-300 transition hover:border-emerald-500 hover:text-emerald-300 active:scale-95"
+              className="tap-target min-h-12 rounded-full border border-neutral-700 bg-neutral-950 px-3 text-sm font-medium text-neutral-300 transition hover:border-emerald-500 hover:text-emerald-300 active:scale-95"
             >
               {chip}
             </button>
@@ -361,7 +366,7 @@ export default function DietPage() {
             void logMeal();
           }}
           disabled={loading || query.trim().length === 0}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-semibold text-neutral-950 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+          className="tap-target mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-neutral-950 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? (
             <>
@@ -424,7 +429,7 @@ export default function DietPage() {
                         onClick={() => {
                           void removeLog(log.id);
                         }}
-                        className="rounded-lg p-1.5 text-neutral-500 transition hover:bg-neutral-800 hover:text-red-400 active:scale-95"
+                        className="tap-target rounded-lg p-3 text-neutral-500 transition hover:bg-neutral-800 hover:text-red-400 active:scale-95"
                         aria-label={`Delete ${log.meal_name}`}
                       >
                         <Trash2 className="h-4 w-4" />

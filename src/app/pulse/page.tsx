@@ -26,6 +26,7 @@ import {
   totalVolumeKg,
   type CompletedWorkout,
 } from "@/lib/workout-history";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 const BEDTIME_STORAGE_KEY = "pulse_bedtime_checks";
 
@@ -402,9 +403,13 @@ export default function PulsePage() {
     );
   };
 
+  if (!hydrated) {
+    return <PageSkeleton />;
+  }
+
   return (
-    <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-36 pt-6 font-sans text-white">
-      <header className="flex items-start justify-between gap-3 pt-[env(safe-area-inset-top)]">
+    <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-36 font-sans text-white">
+      <header className="sticky top-0 z-40 -mx-4 mb-1 flex items-start justify-between gap-3 border-b border-neutral-800 bg-neutral-950/95 px-4 py-3 backdrop-blur-md">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-neutral-500">
             Module 3
@@ -469,7 +474,7 @@ export default function PulsePage() {
           </div>
           <Link
             href="/"
-            className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-emerald-500 py-2.5 text-sm font-semibold text-black transition active:scale-98"
+            className="tap-target mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-black transition active:scale-95"
           >
             Log a workout
           </Link>
@@ -641,7 +646,7 @@ export default function PulsePage() {
                   setCopiedSummary(false);
                 }
               }}
-              className="rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] font-semibold text-neutral-200"
+              className="tap-target min-h-12 rounded-full border border-neutral-700 px-3 text-sm font-semibold text-neutral-200 transition active:scale-95"
             >
               {copiedSummary ? "Copied" : "Copy weekly summary"}
             </button>
@@ -787,7 +792,7 @@ export default function PulsePage() {
                   <button
                     type="button"
                     onClick={() => toggleCheck(item.id)}
-                    className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-md border transition active:scale-98 ${
+                    className={`tap-target mt-0.5 flex h-12 w-12 items-center justify-center rounded-xl border transition active:scale-95 ${
                       isChecked
                         ? "border-emerald-500 bg-emerald-500 text-black"
                         : "border-neutral-700 bg-neutral-950 text-transparent"

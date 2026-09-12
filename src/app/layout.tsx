@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNav } from "@/components/layout/BottomNav";
 import "./globals.css";
 
@@ -11,8 +12,12 @@ export const metadata: Metadata = {
   applicationName: "Fitness OS",
   manifest: "/manifest.json",
   icons: {
-    icon: "/icon.svg",
-    apple: "/icon.svg",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
   appleWebApp: {
     capable: true,
@@ -31,6 +36,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -46,9 +52,11 @@ export default function RootLayout({
       <body
         className={`${inter.className} min-h-dvh bg-neutral-950 pt-[env(safe-area-inset-top)] text-neutral-50`}
       >
-        <main className="relative z-0 mx-auto min-h-dvh max-w-md overflow-y-auto scroll-smooth border-x border-neutral-800 bg-neutral-950 pb-[calc(9rem+env(safe-area-inset-bottom))] text-neutral-50 shadow-2xl">
-          {children}
-        </main>
+        <ErrorBoundary>
+          <main className="relative z-0 mx-auto min-h-dvh max-w-md overflow-y-auto scroll-smooth bg-neutral-950 pb-[calc(9rem+env(safe-area-inset-bottom))] text-neutral-50 sm:border-x sm:border-neutral-800 sm:shadow-2xl">
+            {children}
+          </main>
+        </ErrorBoundary>
         <BottomNav />
       </body>
     </html>

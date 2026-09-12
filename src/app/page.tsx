@@ -31,6 +31,8 @@ import {
 import { isValidLoggedSet, pruneToValidSets, validSetCount } from "@/lib/workout-session";
 import { finishWorkoutSession } from "@/lib/workout-sync";
 import { persistLastCompletedWorkout } from "@/lib/pulse-storage";
+import { InstallAppHint } from "@/components/InstallAppHint";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 const STORAGE_KEY = "active_workout_session";
 const REST_PRESETS = [60, 90, 120] as const;
@@ -435,18 +437,14 @@ export default function WorkoutPage() {
   };
 
   if (!hydrated) {
-    return (
-      <section className="mx-auto min-h-screen max-w-md bg-neutral-950 px-4 pb-36 pt-6 text-white">
-        <p className="text-sm text-neutral-500">Loading workout…</p>
-      </section>
-    );
+    return <PageSkeleton />;
   }
 
   const canFinish = session ? validSetCount(session.exercises) > 0 : false;
 
   return (
-    <section className="mx-auto min-h-screen max-w-md overflow-x-hidden bg-neutral-950 px-4 pb-36 pt-6 font-sans text-white">
-      <header className="flex items-start justify-between gap-3">
+    <section className="mx-auto min-h-screen max-w-md overflow-x-hidden bg-neutral-950 px-4 pb-36 font-sans text-white">
+      <header className="sticky top-0 z-40 -mx-4 mb-1 flex items-start justify-between gap-3 border-b border-neutral-800 bg-neutral-950/95 px-4 py-3 backdrop-blur-md">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
             {new Intl.DateTimeFormat("en-US", {
@@ -473,13 +471,15 @@ export default function WorkoutPage() {
               onClick={() => {
                 void finishSession();
               }}
-              className="rounded-xl bg-emerald-500 px-3.5 py-2 text-sm font-semibold text-black transition active:scale-98 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500"
+              className="tap-target min-h-12 rounded-xl bg-emerald-500 px-4 py-3.5 text-sm font-semibold text-black transition active:scale-95 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500"
             >
               Finish Workout
             </button>
           ) : null}
         </div>
       </header>
+
+      <InstallAppHint />
 
       {banner ? (
         <div className="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2.5 text-sm font-medium text-emerald-300">
@@ -512,7 +512,7 @@ export default function WorkoutPage() {
                       setRestRemaining(preset);
                     }
                   }}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                  className={`tap-target min-h-12 min-w-12 rounded-full px-3 text-sm font-semibold transition active:scale-95 ${
                     restSeconds === preset
                       ? "bg-emerald-500 text-black"
                       : "border border-neutral-700 text-neutral-300"
@@ -527,7 +527,7 @@ export default function WorkoutPage() {
             <button
               type="button"
               onClick={() => setRestRemaining(null)}
-              className="mt-2 text-xs text-neutral-500 underline-offset-4 hover:text-neutral-300 hover:underline"
+              className="tap-target mt-2 min-h-12 rounded-xl border border-neutral-800 px-3 text-sm font-medium text-neutral-300 transition active:scale-95"
             >
               Skip rest
             </button>
@@ -552,7 +552,7 @@ export default function WorkoutPage() {
                   key={split.id}
                   type="button"
                   onClick={() => startSplit(split)}
-                  className={`rounded-2xl border border-neutral-800 bg-neutral-900 p-4 text-left transition hover:border-emerald-500/50 active:scale-98 ${
+                  className={`min-h-12 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 text-left transition hover:border-emerald-500/50 active:scale-95 ${
                     split.id === "empty" ? "col-span-2" : ""
                   }`}
                 >
@@ -621,13 +621,13 @@ export default function WorkoutPage() {
                         : current
                     )
                   }
-                  className="rounded-lg p-1.5 text-neutral-500 hover:text-red-400"
+                  className="tap-target rounded-lg p-3 text-neutral-500 hover:text-red-400"
                   aria-label={`Remove ${exercise.name}`}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-              <div className="mt-4 grid grid-cols-[2rem_minmax(3.5rem,1fr)_1fr_1fr_2.25rem] gap-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+              <div className="mt-4 grid grid-cols-[2rem_minmax(3.25rem,1fr)_1fr_1fr_3rem] gap-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
                 <span className="text-center">Set</span>
                 <span className="text-center">Previous</span>
                 <span className="text-center">Weight</span>
@@ -638,7 +638,7 @@ export default function WorkoutPage() {
                 {exercise.sets.map((set, setIndex) => (
                   <div
                     key={set.id}
-                    className="grid grid-cols-[2rem_minmax(3.5rem,1fr)_1fr_1fr_2.25rem] items-center gap-2"
+                    className="grid grid-cols-[2rem_minmax(3.25rem,1fr)_1fr_1fr_3rem] items-center gap-2"
                   >
                     <span className="text-center font-mono text-sm text-neutral-400">
                       {set.setNumber}
@@ -672,7 +672,7 @@ export default function WorkoutPage() {
                             : current
                         )
                       }
-                      className="h-11 min-w-0 rounded-xl border border-neutral-800 bg-neutral-950 text-center font-mono text-sm outline-none focus:border-emerald-500"
+                      className="min-h-12 min-w-0 rounded-xl border border-neutral-800 bg-neutral-950 text-center font-mono text-base outline-none focus:border-emerald-500"
                     />
                     <input
                       inputMode="numeric"
@@ -700,7 +700,7 @@ export default function WorkoutPage() {
                             : current
                         )
                       }
-                      className="h-11 min-w-0 rounded-xl border border-neutral-800 bg-neutral-950 text-center font-mono text-sm outline-none focus:border-emerald-500"
+                      className="min-h-12 min-w-0 rounded-xl border border-neutral-800 bg-neutral-950 text-center font-mono text-base outline-none focus:border-emerald-500"
                     />
                     <button
                       type="button"
@@ -751,7 +751,7 @@ export default function WorkoutPage() {
                         );
                         setRestRemaining(restSeconds);
                       }}
-                      className={`flex h-9 w-9 items-center justify-center rounded-full border ${
+                      className={`tap-target flex h-12 w-12 items-center justify-center rounded-full border transition active:scale-95 ${
                         set.completed
                           ? "border-emerald-500 bg-emerald-500 text-black"
                           : "border-neutral-700 text-neutral-500"
@@ -793,7 +793,7 @@ export default function WorkoutPage() {
                       : current
                   )
                 }
-                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-neutral-800 py-2.5 text-sm text-neutral-300"
+                className="tap-target mt-3 flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-neutral-800 py-3.5 text-sm text-neutral-300 transition active:scale-95"
               >
                 <Plus className="h-4 w-4" />
                 Add Set
@@ -835,11 +835,11 @@ export default function WorkoutPage() {
                     value={splitName}
                     onChange={(event) => setSplitName(event.target.value)}
                     placeholder="e.g. Heavy Push"
-                    className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-800 bg-neutral-950 px-3 text-sm text-white outline-none focus:border-emerald-500"
+                    className="min-h-12 min-w-0 flex-1 rounded-xl border border-neutral-800 bg-neutral-950 px-3 text-base text-white outline-none focus:border-emerald-500"
                   />
                   <button
                     type="submit"
-                    className="rounded-xl bg-emerald-500 px-3 text-xs font-semibold text-black"
+                    className="tap-target min-h-12 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black transition active:scale-95"
                   >
                     Save
                   </button>
@@ -849,7 +849,7 @@ export default function WorkoutPage() {
             <button
               type="button"
               onClick={() => setIsModalOpen(true)}
-              className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-700 bg-neutral-900/40 py-3.5 font-semibold text-neutral-300 transition hover:border-emerald-500 active:scale-98"
+              className="tap-target mb-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-700 bg-neutral-900/40 py-3.5 font-semibold text-neutral-300 transition hover:border-emerald-500 active:scale-95"
             >
               <Plus className="h-4 w-4" />
               + Add Exercise
@@ -857,7 +857,7 @@ export default function WorkoutPage() {
             <button
               type="button"
               onClick={cancelWorkout}
-              className="mb-10 w-full py-2 text-sm font-medium text-neutral-500 underline-offset-4 hover:text-red-400 hover:underline"
+              className="tap-target mb-10 min-h-12 w-full rounded-xl border border-neutral-800 text-sm font-medium text-neutral-400 transition active:scale-95 hover:border-red-400/40 hover:text-red-400"
             >
               Cancel Workout
             </button>
@@ -893,7 +893,7 @@ export default function WorkoutPage() {
                     <button
                       type="button"
                       onClick={() => setHistory(removeWorkoutHistory(entry.id))}
-                      className="p-1.5 text-neutral-500 hover:text-red-400"
+                      className="tap-target p-3 text-neutral-500 hover:text-red-400"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

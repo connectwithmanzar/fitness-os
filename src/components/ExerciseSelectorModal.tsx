@@ -39,7 +39,7 @@ function PillRow<T extends string>({
             key={option}
             type="button"
             onClick={() => onChange(option)}
-            className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+            className={`tap-target min-h-12 whitespace-nowrap rounded-full border px-4 text-sm font-semibold transition active:scale-95 ${
               active
                 ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
                 : "border-neutral-800 bg-neutral-900 text-neutral-400"
@@ -103,7 +103,12 @@ export function ExerciseSelectorModal({
           <h2 id="exercise-library-title" className="text-lg font-semibold text-white">
             Exercise Library
           </h2>
-          <button type="button" onClick={resetAndClose} aria-label="Close exercise library">
+          <button
+            type="button"
+            onClick={resetAndClose}
+            className="tap-target flex h-12 w-12 items-center justify-center rounded-full text-neutral-400"
+            aria-label="Close exercise library"
+          >
             <X className="h-5 w-5 text-neutral-400" />
           </button>
         </div>
@@ -115,7 +120,7 @@ export function ExerciseSelectorModal({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search exercises..."
-              className="h-12 w-full rounded-xl border border-neutral-800 bg-neutral-900 pl-10 pr-3 text-sm text-white outline-none focus:border-emerald-500"
+              className="h-12 w-full rounded-xl border border-neutral-800 bg-neutral-900 pl-10 pr-3 text-base text-white outline-none focus:border-emerald-500"
             />
           </label>
           <PillRow
@@ -170,7 +175,7 @@ export function ExerciseSelectorModal({
             value={customName}
             onChange={(event) => setCustomName(event.target.value)}
             placeholder="Custom movement"
-            className="h-11 min-w-0 flex-1 rounded-xl border border-neutral-800 bg-neutral-900 px-3 text-sm text-white outline-none focus:border-emerald-500"
+            className="min-h-12 min-w-0 flex-1 rounded-xl border border-neutral-800 bg-neutral-900 px-3 text-base text-white outline-none focus:border-emerald-500"
           />
           <button
             type="button"
@@ -190,7 +195,7 @@ export function ExerciseSelectorModal({
                 defaultSets: 3,
               });
             }}
-            className="shrink-0 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black"
+            className="tap-target shrink-0 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black transition active:scale-95"
           >
             Add
           </button>
@@ -245,7 +250,7 @@ export function ExerciseSelectorModal({
             <button
               type="button"
               onClick={() => addExercise(detail)}
-              className="mt-5 w-full rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-black transition active:scale-98"
+              className="tap-target mt-5 min-h-12 w-full rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-black transition active:scale-95"
             >
               Add to Routine
             </button>

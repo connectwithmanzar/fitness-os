@@ -5,6 +5,7 @@ import { Loader2, User, X } from "lucide-react";
 import { setGuestMode } from "@/lib/auth-session";
 import { downloadBackup, importBackupJson } from "@/lib/backup";
 import { getSupabase } from "@/lib/supabaseClient";
+import { InstallAppHint } from "@/components/InstallAppHint";
 
 type AuthTab = "signin" | "signup";
 
@@ -25,7 +26,7 @@ export function AccountButton({
     <button
       type="button"
       onClick={onClick}
-      className="relative flex items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900/80 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:border-emerald-500 active:scale-98"
+      className="tap-target relative flex min-h-12 items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900/80 px-3.5 text-sm font-semibold text-white transition hover:border-emerald-500 active:scale-95"
       aria-label="Open account"
     >
       <User className="h-3.5 w-3.5" />
@@ -192,7 +193,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
                 void signOut();
               }}
               disabled={busy}
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-700 py-3 text-sm font-semibold text-white transition active:scale-98 disabled:opacity-60"
+              className="tap-target mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-neutral-700 py-3.5 text-sm font-semibold text-white transition active:scale-95 disabled:opacity-60"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Sign Out
@@ -204,7 +205,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => setTab("signin")}
-                className={`rounded-xl py-2 text-sm font-semibold transition ${
+                className={`tap-target min-h-12 rounded-xl py-3 text-sm font-semibold transition active:scale-95 ${
                   tab === "signin"
                     ? "bg-emerald-500 text-black"
                     : "border border-neutral-800 bg-neutral-900 text-neutral-300"
@@ -215,7 +216,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => setTab("signup")}
-                className={`rounded-xl py-2 text-sm font-semibold transition ${
+                className={`tap-target min-h-12 rounded-xl py-3 text-sm font-semibold transition active:scale-95 ${
                   tab === "signup"
                     ? "bg-emerald-500 text-black"
                     : "border border-neutral-800 bg-neutral-900 text-neutral-300"
@@ -238,7 +239,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="Email"
-                className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-white outline-none focus:border-emerald-500"
+                className="min-h-12 rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-base text-white outline-none focus:border-emerald-500"
               />
               <input
                 type="password"
@@ -247,12 +248,12 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Password"
-                className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-white outline-none focus:border-emerald-500"
+                className="min-h-12 rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-base text-white outline-none focus:border-emerald-500"
               />
               <button
                 type="submit"
                 disabled={busy}
-                className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-semibold text-black transition active:scale-98 disabled:opacity-70"
+                className="tap-target flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-black transition active:scale-95 disabled:opacity-70"
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin text-black" /> : null}
                 {tab === "signin" ? "Sign In" : "Create Account"}
@@ -264,6 +265,8 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
         {error ? (
           <p className="mt-3 text-sm font-medium text-amber-300">{error}</p>
         ) : null}
+
+        <InstallAppHint placement="account" />
 
         <div className="mt-5 rounded-2xl border border-neutral-800 bg-neutral-900/70 p-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
@@ -279,14 +282,14 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
                 downloadBackup();
                 setBackupNote("Backup downloaded.");
               }}
-              className="rounded-xl border border-neutral-700 py-2.5 text-xs font-semibold text-white transition active:scale-98"
+              className="tap-target min-h-12 rounded-xl border border-neutral-700 py-3 text-sm font-semibold text-white transition active:scale-95"
             >
               Export JSON
             </button>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="rounded-xl border border-neutral-700 py-2.5 text-xs font-semibold text-white transition active:scale-98"
+              className="tap-target min-h-12 rounded-xl border border-neutral-700 py-3 text-sm font-semibold text-white transition active:scale-95"
             >
               Import JSON
             </button>
