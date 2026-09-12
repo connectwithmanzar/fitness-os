@@ -266,9 +266,8 @@ export default function DietPage() {
   }
 
   return (
-    <section className="mx-auto min-h-screen max-w-md bg-canvas px-5 pb-8 text-ink">
+    <section>
       <PageHeader
-        kicker="Nutrition"
         title="Eat"
         subtitle="Log katori, roti, plates, grams, or ml."
         action={<AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />}
@@ -276,25 +275,25 @@ export default function DietPage() {
 
       {banner ? <AppBanner>{banner}</AppBanner> : null}
 
-      <section className="surface mt-5 p-5">
+      <div className="card">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="eyebrow">Remaining</p>
-            <p className="mt-2 font-display text-4xl font-semibold tabular-nums tracking-tight">
+            <h2>Remaining</h2>
+            <p className="big">
               {formatNumber(Math.max(0, targets.calories - totals.calories))}
-              <span className="ml-1 text-base font-medium text-faint">kcal</span>
             </p>
-            <p className="mt-2 text-sm text-mute">
-              {formatNumber(Math.max(0, targets.protein_g - totals.protein_g), 0)}g protein left
+            <p className="t-foot" style={{ marginTop: 4 }}>
+              kcal left · {formatNumber(Math.max(0, targets.protein_g - totals.protein_g), 0)}g
+              protein
             </p>
           </div>
           <button
             type="button"
+            className="btn sm"
             onClick={() => {
               setDraftTargets(targets);
               setEditingTargets((open) => !open);
             }}
-            className="btn-ghost px-3"
           >
             {editingTargets ? "Close" : "Targets"}
           </button>
@@ -317,7 +316,7 @@ export default function DietPage() {
                 ["fiber_g", "Fiber"],
               ] as const
             ).map(([key, label]) => (
-              <label key={key} className="text-[11px] text-faint">
+              <label key={key} className="t-foot">
                 {label}
                 <input
                   inputMode="decimal"
@@ -328,11 +327,12 @@ export default function DietPage() {
                       [key]: Number(event.target.value) || 0,
                     }))
                   }
-                  className="input-field mt-1"
+                  className="field"
+                  style={{ marginTop: 6 }}
                 />
               </label>
             ))}
-            <button type="submit" className="btn-primary col-span-2 mt-1">
+            <button type="submit" className="btn primary" style={{ gridColumn: "1 / -1" }}>
               Save targets
             </button>
           </form>
@@ -348,12 +348,13 @@ export default function DietPage() {
               { label: "Fiber", consumed: totals.fiber_g, target: targets.fiber_g, unit: "g" },
             ] as const
           ).map((row) => {
-            const percent = row.target > 0 ? Math.min(100, Math.round((row.consumed / row.target) * 100)) : 0;
+            const percent =
+              row.target > 0 ? Math.min(100, Math.round((row.consumed / row.target) * 100)) : 0;
             return (
               <div key={row.label}>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-mute">{row.label}</span>
-                  <span className="tabular-nums text-faint">
+                <div className="flex items-center justify-between">
+                  <span className="t-sub">{row.label}</span>
+                  <span className="t-foot">
                     {formatNumber(row.consumed, row.unit === "kcal" ? 0 : 1)} /{" "}
                     {formatNumber(row.target)} {row.unit}
                   </span>
@@ -363,10 +364,10 @@ export default function DietPage() {
             );
           })}
         </div>
-      </section>
+      </div>
 
-      <section className="surface mt-4 p-4">
-        <label htmlFor="meal-query" className="font-display text-base font-semibold text-ink">
+      <div className="card">
+        <label htmlFor="meal-query" className="t-head">
           What did you eat?
         </label>
         <textarea
@@ -375,29 +376,29 @@ export default function DietPage() {
           onChange={(event) => setQuery(event.target.value)}
           rows={4}
           placeholder="e.g., 250g paneer bhurji, 2 roti, and 1 katori dal or 300ml whole milk..."
-          className="input-field mt-3 resize-none py-3"
+          className="field"
+          style={{ marginTop: 10, resize: "none", minHeight: 96 }}
         />
-
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="chips" style={{ marginTop: 10 }}>
           {SHORTCUTS.map((chip) => (
             <button
               key={chip}
               type="button"
+              className="chip"
               onClick={() => setQuery((current) => appendShortcut(current, chip))}
-              className="tap-target min-h-12 rounded-full border border-line bg-inset px-3 text-sm font-medium text-mute transition hover:border-accent/50 hover:text-accent active:scale-95"
             >
               {chip}
             </button>
           ))}
         </div>
-
         <button
           type="button"
           onClick={() => {
             void logMeal();
           }}
           disabled={loading || query.trim().length === 0}
-          className="btn-primary mt-4"
+          className="btn primary"
+          style={{ marginTop: 14 }}
         >
           {loading ? (
             <>
@@ -408,19 +409,16 @@ export default function DietPage() {
             "Log meal"
           )}
         </button>
-        {error ? <p className="mt-3 text-xs text-warn">{error}</p> : null}
-      </section>
+        {error ? (
+          <p className="t-foot" style={{ marginTop: 10, color: "var(--orange)" }}>
+            {error}
+          </p>
+        ) : null}
+      </div>
 
-      <section className="mt-6">
-        <div className="flex items-end justify-between">
-          <div>
-            <p className="eyebrow">Log</p>
-            <h2 className="mt-2 font-display text-lg font-semibold">Today&apos;s meals</h2>
-          </div>
-          <p className="text-xs text-faint">{logs.length} logged</p>
-        </div>
-
-        <div className="mt-4 flex flex-col gap-3">
+      <div className="sect">
+        <span className="sect-t">Today&apos;s meals · {logs.length}</span>
+        <div className="sect-b">
           {logs.length === 0 ? (
             <EmptyState
               title="Nothing logged yet"
@@ -431,70 +429,62 @@ export default function DietPage() {
               const expanded = expandedId === log.id;
               const fiberG = fiberFromEntry(log);
               return (
-                <article key={log.id} className="surface p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-ink">{log.meal_name}</h3>
-                      <p className="mt-1 text-xs text-mute">{log.serving_inferred}</p>
-                      {log.source ? (
-                        <span className={log.source === "gemini" ? "chip-accent mt-2" : "chip mt-2"}>
-                          {log.source === "gemini" ? "Gemini" : "Estimate"}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="chip-accent">{formatNumber(log.calories)} kcal</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void removeLog(log.id);
-                        }}
-                        className="tap-target rounded-lg p-3 text-faint transition hover:bg-inset hover:text-danger active:scale-95"
-                        aria-label={`Delete ${log.meal_name}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+                <div key={log.id}>
+                  <div className="lrow">
+                    <span className="lrow-m">
+                      <span className="lrow-t">{log.meal_name}</span>
+                      <span className="lrow-s">
+                        {formatNumber(log.calories)} kcal · P {formatNumber(log.protein_g, 1)}g · C{" "}
+                        {formatNumber(log.carbs_g, 1)}g · F {formatNumber(log.fats_g, 1)}g · Fiber{" "}
+                        {formatNumber(fiberG, 0)}g
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void removeLog(log.id);
+                      }}
+                      className="iconbtn"
+                      aria-label={`Delete ${log.meal_name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <span className="chip">P: {formatNumber(log.protein_g, 1)}g</span>
-                    <span className="chip">C: {formatNumber(log.carbs_g, 1)}g</span>
-                    <span className="chip">F: {formatNumber(log.fats_g, 1)}g</span>
-                    <span className="chip-accent">Fiber: {formatNumber(fiberG, 0)}g</span>
-                  </div>
-
                   <button
                     type="button"
+                    className="lrow tap"
                     onClick={() => setExpandedId(expanded ? null : log.id)}
-                    className="mt-3 flex w-full items-center justify-between text-left text-xs font-medium text-mute transition hover:text-ink active:scale-95"
                     aria-expanded={expanded}
                   >
-                    Micronutrients
+                    <span className="lrow-m">
+                      <span className="lrow-s">
+                        {log.serving_inferred}
+                        {log.source ? ` · ${log.source === "gemini" ? "Gemini" : "Estimate"}` : ""}
+                      </span>
+                    </span>
                     <ChevronDown
-                      className={`h-4 w-4 transition ${expanded ? "rotate-180" : ""}`}
+                      className="lrow-c h-4 w-4"
+                      style={{ transform: expanded ? "rotate(180deg)" : undefined }}
                     />
                   </button>
-
                   {expanded ? (
-                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-control bg-inset p-3 text-xs text-mute">
-                      <p>Iron: {formatNumber(log.micronutrients.iron_mg, 1)} mg</p>
-                      <p>Zinc: {formatNumber(log.micronutrients.zinc_mg, 1)} mg</p>
-                      <p>Magnesium: {formatNumber(log.micronutrients.magnesium_mg, 1)} mg</p>
-                      <p>Calcium: {formatNumber(log.micronutrients.calcium_mg, 1)} mg</p>
-                      <p>Vitamin D: {formatNumber(log.micronutrients.vitamin_d_iu, 1)} IU</p>
-                      <p>B12: {formatNumber(log.micronutrients.vitamin_b12_mcg, 2)} mcg</p>
-                      {log.breakdown_summary ? (
-                        <p className="col-span-2 text-faint">{log.breakdown_summary}</p>
-                      ) : null}
+                    <div className="t-foot" style={{ padding: "0 14px 14px" }}>
+                      Iron {formatNumber(log.micronutrients.iron_mg, 1)} mg · Zinc{" "}
+                      {formatNumber(log.micronutrients.zinc_mg, 1)} mg · Mg{" "}
+                      {formatNumber(log.micronutrients.magnesium_mg, 1)} mg · Ca{" "}
+                      {formatNumber(log.micronutrients.calcium_mg, 1)} mg · D{" "}
+                      {formatNumber(log.micronutrients.vitamin_d_iu, 1)} IU · B12{" "}
+                      {formatNumber(log.micronutrients.vitamin_b12_mcg, 2)} mcg
+                      {log.breakdown_summary ? ` · ${log.breakdown_summary}` : ""}
                     </div>
                   ) : null}
-                </article>
+                </div>
               );
             })
           )}
         </div>
-      </section>
+      </div>
+
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}

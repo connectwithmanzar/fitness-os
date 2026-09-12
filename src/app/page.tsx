@@ -34,12 +34,13 @@ import {
 import { isValidLoggedSet, pruneToValidSets, validSetCount } from "@/lib/workout-session";
 import { finishWorkoutSession } from "@/lib/workout-sync";
 import { persistLastCompletedWorkout } from "@/lib/pulse-storage";
-import { notifyFitnessDataChanged } from "@/lib/fitness-events";
+import { notifyFitnessDataChanged, notifyWorkoutSessionChanged } from "@/lib/fitness-events";
 import { InstallAppHint } from "@/components/InstallAppHint";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { AppBanner } from "@/components/ui/AppBanner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Stepper } from "@/components/ui/Stepper";
 
 const STORAGE_KEY = "active_workout_session";
 const REST_PRESETS = [60, 90, 120] as const;
@@ -378,9 +379,11 @@ export default function WorkoutPage() {
     }
     if (!session) {
       window.localStorage.removeItem(STORAGE_KEY);
+      notifyWorkoutSessionChanged();
       return;
     }
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    notifyWorkoutSessionChanged();
   }, [hydrated, session]);
 
   useEffect(() => {
@@ -404,6 +407,17 @@ export default function WorkoutPage() {
       setRestRemaining((current) => (current === null ? null : current - 1));
     }, 1000);
     return () => window.clearTimeout(timeout);
+  }, [restRemaining]);
+
+  useEffect(() => {
+    const app = document.getElementById("app");
+    if (!app) {
+      return;
+    }
+    app.classList.toggle("resting", restRemaining !== null);
+    return () => {
+      app.classList.remove("resting");
+    };
   }, [restRemaining]);
 
   const addExercise = (exercise: LibraryExercise) => {
@@ -529,113 +543,171 @@ export default function WorkoutPage() {
   }
 
   const canFinish = session ? validSetCount(session.exercises) > 0 : false;
+  const setCount = session
+    ? session.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0)
+    : 0;
+  const doneCount = session
+    ? session.exercises.reduce(
+        (sum, exercise) => sum + exercise.sets.filter((set) => set.completed).length,
+        0
+      )
+    : 0;
+  const progressPct = setCount > 0 ? (doneCount / setCount) * 100 : 0;
+
+  const patchSet = (
+    exerciseId: string,
+    setId: string,
+    patch: Partial<WorkoutSet>
+  ) => {
+    setSession((current) =>
+      current
+        ? {
+            ...current,
+            exercises: current.exercises.map((item) =>
+              item.id === exerciseId
+                ? {
+                    ...item,
+                    sets: item.sets.map((row) =>
+                      row.id === setId ? { ...row, ...patch } : row
+                    ),
+                  }
+                : item
+            ),
+          }
+        : current
+    );
+  };
 
   return (
-    <section className="mx-auto min-h-screen max-w-md overflow-x-hidden bg-canvas px-5 pb-8 font-sans text-ink">
-      <PageHeader
-        kicker={new Intl.DateTimeFormat("en-US", {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-        }).format(new Date())}
-        title={session ? sessionName(session) : "Train"}
-        subtitle={session ? "Log sets. Rest. Repeat." : "Pick a split or open a saved plan."}
-        action={
-          <>
-            <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
-            {session ? (
-              <button
-                type="button"
-                disabled={!canFinish}
-                onClick={() => {
-                  void finishSession();
-                }}
-                className="btn-primary w-auto px-4 disabled:bg-inset disabled:text-faint"
-              >
-                Finish
-              </button>
-            ) : null}
-          </>
-        }
-      />
-
+    <section>
       {session ? (
-        <div className="sticky top-[4.75rem] z-30 -mx-5 mb-4 border-b border-line bg-raised/90 px-5 py-3 backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="eyebrow">Rest</p>
-              <p className="mt-0.5 font-display text-2xl font-semibold tabular-nums text-ink">
-                {restRemaining === null
-                  ? `${restSeconds}s`
-                  : `${Math.floor(restRemaining / 60)}:${String(restRemaining % 60).padStart(2, "0")}`}
-              </p>
-            </div>
-            <div className="flex gap-1.5">
-              {REST_PRESETS.map((preset) => (
+        <div className="whdr stick">
+          <PageHeader
+            title={sessionName(session)}
+            subtitle={`${doneCount}/${setCount} sets`}
+            action={
+              <div className="flex items-center gap-2">
+                <AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />
                 <button
-                  key={preset}
                   type="button"
+                  disabled={!canFinish}
                   onClick={() => {
-                    setRestSeconds(preset);
-                    if (restRemaining !== null) {
-                      setRestRemaining(preset);
-                    }
+                    void finishSession();
                   }}
-                  className={`tap-target min-h-12 min-w-12 rounded-full px-3 text-sm font-semibold transition active:scale-95 ${
-                    restSeconds === preset
-                      ? "bg-accent text-accent-fg"
-                      : "border border-line text-mute"
-                  }`}
+                  className="btn primary sm"
                 >
-                  {preset}s
+                  Finish
                 </button>
-              ))}
-            </div>
+              </div>
+            }
+          />
+          <div className="wprog">
+            <i style={{ width: `${progressPct}%` }} />
           </div>
-          {restRemaining !== null ? (
-            <button
-              type="button"
-              onClick={() => setRestRemaining(null)}
-              className="btn-secondary mt-2"
-            >
-              Skip rest
-            </button>
-          ) : (
-            <p className="mt-2 text-[11px] text-faint">
-              Starts automatically when you complete a set.
-            </p>
-          )}
+          <div className="chips" style={{ marginBottom: 12 }}>
+            {REST_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={`chip ${restSeconds === preset ? "acc" : ""}`}
+                onClick={() => {
+                  setRestSeconds(preset);
+                  if (restRemaining !== null) {
+                    setRestRemaining(preset);
+                  }
+                }}
+              >
+                {preset}s rest
+              </button>
+            ))}
+          </div>
         </div>
       ) : (
-        <InstallAppHint />
+        <>
+          <PageHeader
+            title="Train"
+            subtitle={new Intl.DateTimeFormat("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            }).format(new Date())}
+            action={<AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />}
+          />
+          <InstallAppHint />
+        </>
       )}
 
       {banner ? <AppBanner>{banner}</AppBanner> : null}
-      {finishError ? <p className="mt-3 text-xs text-warn">{finishError}</p> : null}
+      {finishError ? (
+        <p className="t-foot" style={{ color: "var(--orange)", marginBottom: 12 }}>
+          {finishError}
+        </p>
+      ) : null}
 
-      <div className={session ? "mt-2" : "mt-5"}>
+      {restRemaining !== null ? (
+        <div id="timer" className="rest">
+          <div className="head">
+            <span className="t">
+              {`${Math.floor(restRemaining / 60)}:${String(restRemaining % 60).padStart(2, "0")}`}
+            </span>
+            <div className="bar">
+              <i
+                style={{
+                  width: `${Math.min(100, (restRemaining / Math.max(restSeconds, 1)) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+          <div className="acts">
+            <button
+              type="button"
+              className="btn sm"
+              onClick={() => setRestRemaining((current) => Math.max(0, (current ?? 0) - 15))}
+            >
+              −15
+            </button>
+            <button
+              type="button"
+              className="btn sm"
+              onClick={() => setRestRemaining((current) => (current ?? 0) + 15)}
+            >
+              +15
+            </button>
+            <button
+              type="button"
+              className="btn sm skip"
+              onClick={() => setRestRemaining(null)}
+            >
+              Skip
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div>
         {!session ? (
           <div className="mb-8">
             {pendingPlan ? (
               <form
-                className="mb-6 surface p-4"
+                className="card"
                 onSubmit={(event) => {
                   event.preventDefault();
                   savePlan(splitName || pendingPlan.title, pendingPlan.exerciseIds);
                 }}
               >
-                <p className="font-display text-base font-semibold text-ink">Save this as my plan</p>
-                <p className="mt-1 text-sm leading-5 text-mute">
+                <h2>Save this as my plan</h2>
+                <p className="t-foot">
                   Keep {pendingPlan.exerciseIds.length} lifts for next time. Stored on this phone.
                 </p>
                 <input
                   value={splitName}
                   onChange={(event) => setSplitName(event.target.value)}
                   placeholder={pendingPlan.title}
-                  className="input-field mt-3"
+                  className="field"
+                  style={{ marginTop: 12 }}
                 />
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button type="submit" className="btn-primary">
+                  <button type="submit" className="btn primary">
                     Save plan
                   </button>
                   <button
@@ -644,7 +716,7 @@ export default function WorkoutPage() {
                       setPendingPlan(null);
                       setSplitName("");
                     }}
-                    className="btn-secondary"
+                    className="btn"
                   >
                     Not now
                   </button>
@@ -653,72 +725,73 @@ export default function WorkoutPage() {
             ) : null}
 
             {customSplits.length > 0 ? (
-              <section className="mb-8">
-                <p className="eyebrow">Library</p>
-                <h2 className="mt-2 font-display text-lg font-semibold">My plans</h2>
-                <p className="mt-1 text-sm text-mute">Custom splits saved on this phone.</p>
-                <div className="mt-4 space-y-3">
+              <section>
+                <h4 className="sec">My plans</h4>
+                <div className="list">
                   {customSplits.map((split) => (
-                    <article
+                    <div
                       key={split.id}
-                      className={`surface p-4 ${
-                        suggestedSplitId === split.id ? "border-accent" : ""
-                      }`}
+                      className="item"
+                      style={
+                        suggestedSplitId === split.id
+                          ? { boxShadow: "inset 0 0 0 1.5px var(--acc)" }
+                          : undefined
+                      }
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-ink">{split.title}</p>
-                          <p className="mt-1 text-xs leading-5 text-mute">{split.detail}</p>
-                          <span className="chip-accent mt-2">Custom</span>
+                      <div className="grow">
+                        <p className="tt">{split.title}</p>
+                        <p className="ss">{split.detail}</p>
+                        <span className="chip acc" style={{ marginTop: 6 }}>
+                          Custom
+                        </span>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startSplit(split)}
+                            className="btn primary sm"
+                          >
+                            Start
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => renamePlan(split)}
+                            className="btn sm"
+                          >
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removePlan(split)}
+                            className="btn sm danger"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </div>
-                      <div className="mt-3 grid grid-cols-3 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => startSplit(split)}
-                          className="btn-primary"
-                        >
-                          Start
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => renamePlan(split)}
-                          className="btn-secondary"
-                        >
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removePlan(split)}
-                          className="tap-target min-h-12 rounded-control border border-danger/40 text-sm font-semibold text-danger transition active:scale-95"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </article>
+                    </div>
                   ))}
                 </div>
               </section>
             ) : null}
 
-            <p className="eyebrow">Start</p>
-            <h2 className="mt-2 font-display text-lg font-semibold">Choose a split</h2>
-            <p className="mt-1 text-sm text-mute">
-              Pre-load compounds, or start empty and add lifts yourself.
-            </p>
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <h4 className="sec">Start a session</h4>
+            <div className="list">
               {WORKOUT_SPLITS.map((split) => (
                 <button
                   key={split.id}
                   type="button"
                   onClick={() => startSplit(split)}
-                  className={`surface min-h-[7.5rem] p-4 text-left transition hover:border-accent/50 active:scale-95 ${
-                    split.id === "empty" ? "col-span-2 min-h-12" : ""
-                  } ${suggestedSplitId === split.id ? "border-accent" : ""}`}
+                  className="item"
+                  style={
+                    suggestedSplitId === split.id
+                      ? { boxShadow: "inset 0 0 0 1.5px var(--acc)" }
+                      : undefined
+                  }
                 >
-                  <span className="os-dot" aria-hidden="true" />
-                  <p className="mt-3 font-display text-base font-semibold text-ink">{split.title}</p>
-                  <p className="mt-1 text-xs leading-5 text-mute">{split.detail}</p>
+                  <div className="grow">
+                    <p className="tt">{split.title}</p>
+                    <p className="ss">{split.detail}</p>
+                  </div>
                 </button>
               ))}
             </div>
@@ -734,10 +807,7 @@ export default function WorkoutPage() {
             const catalog = findExerciseByName(exercise.name);
             const hint = overloadHint(exercise.name, history);
             return (
-            <article
-              key={exercise.id}
-              className="mb-3 surface p-3"
-            >
+            <article key={exercise.id} className="card">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
                   <ExerciseThumb
@@ -745,24 +815,20 @@ export default function WorkoutPage() {
                     muscle={muscle}
                     gifUrl={exercise.gifUrl ?? catalog?.gifUrl ?? ""}
                     stillUrl={exercise.stillUrl ?? catalog?.stillUrl}
-                    className="h-[52px] w-[52px] shrink-0 rounded-xl object-cover"
+                    className="h-[50px] w-[50px] shrink-0 rounded-[9px] object-cover"
                   />
                   <div className="min-w-0">
-                    <h2 className="truncate text-base font-semibold text-ink">{exercise.name}</h2>
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      <span className="chip-accent">
-                        {muscle}
-                      </span>
+                    <h2 className="tt truncate" style={{ color: "var(--label)" }}>
+                      {exercise.name}
+                    </h2>
+                    <div className="chips" style={{ marginTop: 6 }}>
+                      <span className="chip acc">{muscle}</span>
                       {exercise.equipment || catalog?.equipment ? (
                         <span className="chip">
                           {exercise.equipment ?? catalog?.equipment}
                         </span>
                       ) : null}
-                      {hint ? (
-                        <span className="inline-flex items-center rounded-full border border-warn/30 bg-warn/10 px-2 py-0.5 text-[10px] font-semibold text-warn">
-                          {hint}
-                        </span>
-                      ) : null}
+                      {hint ? <span className="chip">{hint}</span> : null}
                     </div>
                   </div>
                 </div>
@@ -778,150 +844,62 @@ export default function WorkoutPage() {
                         : current
                     )
                   }
-                  className="tap-target rounded-lg p-3 text-faint hover:text-danger"
+                  className="iconbtn"
                   aria-label={`Remove ${exercise.name}`}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-              <div className="mt-3 grid grid-cols-[1.75rem_minmax(3.25rem,1fr)_1fr_1fr_2.75rem] gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
-                <span className="text-center">Set</span>
-                <span className="text-center">Prev</span>
-                <span className="text-center">kg</span>
-                <span className="text-center">Reps</span>
-                <span />
+              <div className="sethead" style={{ marginTop: 10 }}>
+                <span className="n-sp">Set</span>
+                <span className="w-sp">kg</span>
+                <span className="r-sp">Reps</span>
+                <span className="ck-sp" />
               </div>
-              <div className="mt-1.5 flex flex-col gap-1">
-                {exercise.sets.map((set, setIndex) => (
-                  <div
-                    key={set.id}
-                    className={`grid grid-cols-[1.75rem_minmax(3.25rem,1fr)_1fr_1fr_2.75rem] items-center gap-1.5 rounded-control px-0.5 ${
-                      set.completed ? "bg-accent/10" : ""
-                    }`}
+              {exercise.sets.map((set, setIndex) => (
+                <div
+                  key={set.id}
+                  className={`setrow ${set.completed ? "done" : ""}`}
+                >
+                  <span className="n" title={previousForSet(exercise.name, setIndex, history)}>
+                    {set.setNumber}
+                  </span>
+                  <Stepper
+                    variant="w"
+                    value={set.weightKg}
+                    step={2.5}
+                    disabled={set.completed}
+                    ariaLabel={`${exercise.name} set ${set.setNumber} weight`}
+                    onChange={(next) => patchSet(exercise.id, set.id, { weightKg: next })}
+                  />
+                  <Stepper
+                    variant="r"
+                    value={set.reps}
+                    step={1}
+                    disabled={set.completed}
+                    ariaLabel={`${exercise.name} set ${set.setNumber} reps`}
+                    onChange={(next) => patchSet(exercise.id, set.id, { reps: next })}
+                  />
+                  <button
+                    type="button"
+                    className={`ck ${set.completed ? "on" : ""}`}
+                    onClick={() => {
+                      if (set.completed) {
+                        patchSet(exercise.id, set.id, { completed: false });
+                        return;
+                      }
+                      if (!isValidLoggedSet({ ...set, completed: true })) {
+                        return;
+                      }
+                      patchSet(exercise.id, set.id, { completed: true });
+                      setRestRemaining(restSeconds);
+                    }}
+                    aria-label={`Mark ${exercise.name} set ${set.setNumber} complete`}
                   >
-                    <span className="text-center font-mono text-sm text-mute">
-                      {set.setNumber}
-                    </span>
-                    <span className="truncate text-center font-mono text-[11px] text-faint">
-                      {previousForSet(exercise.name, setIndex, history)}
-                    </span>
-                    <input
-                      inputMode="decimal"
-                      value={set.weightKg}
-                      readOnly={set.completed}
-                      aria-label={`${exercise.name} set ${set.setNumber} weight`}
-                      onChange={(event) =>
-                        setSession((current) =>
-                          current
-                            ? {
-                                ...current,
-                                exercises: current.exercises.map((item) =>
-                                  item.id === exercise.id
-                                    ? {
-                                        ...item,
-                                        sets: item.sets.map((row) =>
-                                          row.id === set.id && !row.completed
-                                            ? { ...row, weightKg: event.target.value }
-                                            : row
-                                        ),
-                                      }
-                                    : item
-                                ),
-                              }
-                            : current
-                        )
-                      }
-                      className="input-field min-h-12 min-w-0 px-1 text-center font-mono"
-                    />
-                    <input
-                      inputMode="numeric"
-                      value={set.reps}
-                      readOnly={set.completed}
-                      aria-label={`${exercise.name} set ${set.setNumber} reps`}
-                      onChange={(event) =>
-                        setSession((current) =>
-                          current
-                            ? {
-                                ...current,
-                                exercises: current.exercises.map((item) =>
-                                  item.id === exercise.id
-                                    ? {
-                                        ...item,
-                                        sets: item.sets.map((row) =>
-                                          row.id === set.id && !row.completed
-                                            ? { ...row, reps: event.target.value }
-                                            : row
-                                        ),
-                                      }
-                                    : item
-                                ),
-                              }
-                            : current
-                        )
-                      }
-                      className="input-field min-h-12 min-w-0 px-1 text-center font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (set.completed) {
-                          setSession((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  exercises: current.exercises.map((item) =>
-                                    item.id === exercise.id
-                                      ? {
-                                          ...item,
-                                          sets: item.sets.map((row) =>
-                                            row.id === set.id
-                                              ? { ...row, completed: false }
-                                              : row
-                                          ),
-                                        }
-                                      : item
-                                  ),
-                                }
-                              : current
-                          );
-                          return;
-                        }
-                        if (!isValidLoggedSet({ ...set, completed: true })) {
-                          return;
-                        }
-                        setSession((current) =>
-                          current
-                            ? {
-                                ...current,
-                                exercises: current.exercises.map((item) =>
-                                  item.id === exercise.id
-                                    ? {
-                                        ...item,
-                                        sets: item.sets.map((row) =>
-                                          row.id === set.id
-                                            ? { ...row, completed: true }
-                                            : row
-                                        ),
-                                      }
-                                    : item
-                                ),
-                              }
-                            : current
-                        );
-                        setRestRemaining(restSeconds);
-                      }}
-                      className={`tap-target flex h-12 w-11 items-center justify-center rounded-full border transition active:scale-95 ${
-                        set.completed
-                          ? "border-accent bg-accent text-accent-fg"
-                          : "border-line text-faint"
-                      }`}
-                      aria-label={`Mark ${exercise.name} set ${set.setNumber} complete`}
-                    >
-                      <Check className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
               <button
                 type="button"
                 onClick={() =>
@@ -952,10 +930,11 @@ export default function WorkoutPage() {
                       : current
                   )
                 }
-                className="btn-ghost mt-2 w-full text-mute"
+                className="btn ghost"
+                style={{ marginTop: 8 }}
               >
                 <Plus className="h-4 w-4" />
-                Add Set
+                Add set
               </button>
             </article>
             );
@@ -966,7 +945,7 @@ export default function WorkoutPage() {
           <>
             {session.exercises.length > 0 ? (
               <form
-                className="mb-3 surface p-3"
+                className="card"
                 onSubmit={(event) => {
                   event.preventDefault();
                   savePlan(
@@ -975,18 +954,16 @@ export default function WorkoutPage() {
                   );
                 }}
               >
-                <p className="eyebrow">Save this as my plan</p>
+                <h2>Save this as my plan</h2>
                 <div className="mt-2 flex gap-2">
                   <input
                     value={splitName}
                     onChange={(event) => setSplitName(event.target.value)}
                     placeholder="e.g. Heavy Push"
-                    className="input-field min-w-0 flex-1"
+                    className="field"
+                    style={{ flex: 1 }}
                   />
-                  <button
-                    type="submit"
-                    className="btn-primary w-auto px-4"
-                  >
+                  <button type="submit" className="btn primary sm">
                     Save
                   </button>
                 </div>
@@ -995,64 +972,53 @@ export default function WorkoutPage() {
             <button
               type="button"
               onClick={() => setIsModalOpen(true)}
-              className="btn-secondary mb-3 border-dashed"
+              className="btn"
+              style={{ marginBottom: 8 }}
             >
               <Plus className="h-4 w-4" />
-              + Add Exercise
+              Add exercise
             </button>
-            <button
-              type="button"
-              onClick={cancelWorkout}
-              className="btn-ghost mb-10 w-full text-faint hover:text-danger"
-            >
-              Cancel Workout
+            <button type="button" onClick={cancelWorkout} className="btn danger">
+              Cancel workout
             </button>
           </>
         ) : null}
       </div>
 
-      <section className={session ? "hidden" : "pb-6"}>
-        <p className="eyebrow">History</p>
-        <h2 className="mt-2 font-display text-lg font-semibold">Past workouts</h2>
+      <section className={session ? "hidden" : undefined}>
+        <h4 className="sec">Past workouts</h4>
         {history.length === 0 ? (
-          <div className="mt-3">
-            <EmptyState
-              title="No sessions yet"
-              body="Finish a workout above and it will land here."
-            />
-          </div>
+          <EmptyState
+            title="No sessions yet"
+            body="Finish a workout above and it will land here."
+          />
         ) : (
-          <div className="mt-3 flex flex-col gap-3">
+          <div className="list">
             {history.map((entry) => (
-              <article key={entry.id} className="surface p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-faint">
-                      {formatHistoryTimestamp(entry.completedAt)}
-                    </p>
-                    <h3 className="mt-1 text-sm font-semibold">{entry.name}</h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="chip-accent">
+              <article key={entry.id} className="item" style={{ alignItems: "flex-start" }}>
+                <div className="grow">
+                  <p className="ss">{formatHistoryTimestamp(entry.completedAt)}</p>
+                  <p className="tt">{entry.name}</p>
+                  <div className="chips" style={{ marginTop: 8 }}>
+                    <span className="chip acc">
                       {completedSetCount(entry)} sets
                       {totalVolumeKg(entry) > 0 ? ` • ${Math.round(totalVolumeKg(entry))}kg` : ""}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setHistory(removeWorkoutHistory(entry.id))}
-                      className="tap-target p-3 text-faint hover:text-danger"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {entry.exercises.map((exercise) => (
+                      <span key={exercise.id} className="chip">
+                        {exercise.name}: {topSetLabel(exercise)}
+                      </span>
+                    ))}
                   </div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {entry.exercises.map((exercise) => (
-                    <span key={exercise.id} className="chip">
-                      {exercise.name}: {topSetLabel(exercise)}
-                    </span>
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setHistory(removeWorkoutHistory(entry.id))}
+                  className="iconbtn"
+                  aria-label={`Delete ${entry.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </article>
             ))}
           </div>

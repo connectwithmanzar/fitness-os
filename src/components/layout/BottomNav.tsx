@@ -1,46 +1,78 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Activity, Dumbbell, Utensils } from "lucide-react";
+import { Activity, Play, Square, Utensils } from "lucide-react";
+import { FITNESS_DATA_CHANGED_EVENT, WORKOUT_SESSION_CHANGED_EVENT } from "@/lib/fitness-events";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Train", icon: Dumbbell },
-  { href: "/diet", label: "Eat", icon: Utensils },
-  { href: "/pulse", label: "Today", icon: Activity },
-] as const;
+const SESSION_KEY = "active_workout_session";
+
+function hasActiveSession(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    if (!raw) {
+      return false;
+    }
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) {
+      return false;
+    }
+    const finishedAt = (parsed as { finishedAt?: string | null }).finishedAt;
+    return !finishedAt;
+  } catch {
+    return false;
+  }
+}
 
 export function BottomNav() {
   const pathname = usePathname();
+  const [recording, setRecording] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setRecording(hasActiveSession());
+    sync();
+    window.addEventListener("storage", sync);
+    window.addEventListener(FITNESS_DATA_CHANGED_EVENT, sync);
+    window.addEventListener(WORKOUT_SESSION_CHANGED_EVENT, sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(FITNESS_DATA_CHANGED_EVENT, sync);
+      window.removeEventListener(WORKOUT_SESSION_CHANGED_EVENT, sync);
+    };
+  }, [pathname]);
+
+  const todayOn = pathname === "/pulse" || pathname.startsWith("/pulse/");
+  const trainOn = pathname === "/";
+  const eatOn = pathname === "/diet" || pathname.startsWith("/diet/");
 
   return (
-    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-      <ul className="pointer-events-auto mx-auto grid max-w-md grid-cols-3 rounded-full border border-line bg-raised/90 p-1 shadow-float backdrop-blur-xl">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
-
-          return (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                prefetch
-                className={`tap-target flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-full px-2 py-2 text-[11px] touch-manipulation transition active:scale-95 ${
-                  isActive
-                    ? "bg-accent/12 font-semibold text-accent"
-                    : "font-medium text-mute hover:text-ink"
-                }`}
-              >
-                <Icon className="h-5 w-5" strokeWidth={isActive ? 2.4 : 2} />
-                <span>{item.label}</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+    <nav id="tabbar" aria-label="Primary">
+      <Link href="/pulse" prefetch className={todayOn ? "on" : undefined}>
+        <Activity className="icn" strokeWidth={todayOn ? 2 : 1.65} />
+        Today
+      </Link>
+      <Link
+        href="/"
+        prefetch
+        className={`start ${recording ? "rec" : ""} ${trainOn ? "on" : ""}`}
+      >
+        <span className="cir" aria-hidden="true">
+          {recording ? (
+            <Square className="icn" strokeWidth={2} />
+          ) : (
+            <Play className="icn" strokeWidth={2} />
+          )}
+        </span>
+        <span>{recording ? "Session" : "Train"}</span>
+      </Link>
+      <Link href="/diet" prefetch className={eatOn ? "on" : undefined}>
+        <Utensils className="icn" strokeWidth={eatOn ? 2 : 1.65} />
+        Eat
+      </Link>
     </nav>
   );
 }

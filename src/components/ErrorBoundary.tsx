@@ -20,14 +20,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex min-h-[70dvh] flex-col items-center justify-center gap-4 bg-canvas px-6 text-center">
-          <span className="os-dot" aria-hidden="true" />
-          <p className="font-display text-lg font-semibold text-ink">
-            Something went wrong
-          </p>
+        <div className="flex min-h-[70dvh] flex-col items-center justify-center gap-4 px-6 text-center">
+          <p className="t-title2">Something went wrong</p>
           <button
             type="button"
-            className="btn-primary max-w-48"
+            className="btn primary"
+            style={{ maxWidth: 200 }}
             onClick={() => {
               window.location.reload();
             }}

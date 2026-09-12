@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Check, ChevronDown, ChevronRight, Dumbbell, Moon, Utensils } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Moon, Utensils } from "lucide-react";
 import { AccountButton, AuthModal } from "@/components/AuthModal";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Meter, meterTone } from "@/components/ui/Meter";
@@ -65,6 +65,8 @@ type ProteinAdherence = "hit" | "partial" | "none";
 type DayTrend = {
   key: string;
   label: string;
+  dayNum: number;
+  isToday: boolean;
   volumeKg: number;
   setsCompleted: number;
   workoutCompleted: boolean;
@@ -144,6 +146,8 @@ function buildWeekTrends(
     return {
       key,
       label: DAY_LETTERS[date.getDay()] ?? "—",
+      dayNum: date.getDate(),
+      isToday: key === localDayKey(end),
       volumeKg,
       setsCompleted,
       workoutCompleted: dayWorkouts.length > 0,
@@ -364,7 +368,6 @@ export default function PulsePage() {
     () => buildWeekTrends(today, meals, workouts, dietTargets.protein_g * 0.85),
     [dietTargets.protein_g, meals, today, workouts]
   );
-  const maxVolume = Math.max(...weekTrends.map((day) => day.volumeKg), 0);
   const hasWeekActivity = weekTrends.some((day) => day.workoutCompleted || day.hasFood);
   const selectedTrend = weekTrends.find((day) => day.key === activeTrendKey) ?? null;
   const calorieSpark = sparklinePoints(
@@ -416,215 +419,203 @@ export default function PulsePage() {
   }
 
   return (
-    <section className="mx-auto min-h-screen max-w-md bg-canvas px-5 pb-8 font-sans text-ink">
+    <section>
       <PageHeader
-        kicker={formatDate(today)}
         title="Today"
-        subtitle="Train, eat, recover."
+        subtitle={formatDate(today)}
         action={<AccountButton signedIn={isSignedIn} onClick={() => setIsAuthOpen(true)} />}
       />
 
-      <section className="surface mt-5 overflow-hidden p-5">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="eyebrow">Readiness</p>
-            <p className="mt-2 font-display text-5xl font-semibold tabular-nums tracking-tight text-ink">
-              {readiness}
-              <span className="ml-1 text-lg font-medium text-faint">%</span>
-            </p>
-          </div>
-          <Activity className="h-6 w-6 text-accent" aria-hidden="true" />
-        </div>
-        <Meter value={readiness} tone={meterTone(readiness)} />
-
-        <div className="mt-5 divide-y divide-line">
-          <Link
-            href={trainingCompleted ? "/" : `/?suggest=${suggestedSplit.id}`}
-            className="tap-target flex min-h-12 items-center gap-3 py-3 first:pt-0"
+      <div className="week">
+        {weekTrends.map((day) => (
+          <button
+            key={day.key}
+            type="button"
+            className={`wday ${day.isToday ? "today" : ""}`}
+            onClick={() =>
+              setActiveTrendKey((current) => (current === day.key ? null : day.key))
+            }
+            aria-label={`${day.label} ${day.dayNum}`}
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/12 text-accent">
-              <Dumbbell className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-ink">
-                {trainingCompleted && latestWorkout ? "Training done" : `Train · ${suggestedSplit.title}`}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-mute">
-                {trainingCompleted && latestWorkout
-                  ? `${latestWorkout.name} • ${completedSetCount(latestWorkout)} sets`
-                  : suggestedSplit.detail}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 text-faint" />
-          </Link>
-
-          <Link href="/diet" className="tap-target flex min-h-12 items-center gap-3 py-3">
-            <span
-              className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                proteinDeficit ? "bg-danger/15 text-danger" : "bg-accent/12 text-accent"
+            <div className="lbl">{day.label}</div>
+            <div className="num">{day.dayNum}</div>
+            <div
+              className={`dot ${
+                day.workoutCompleted ? "done" : day.hasFood ? "plan" : ""
               }`}
+            />
+          </button>
+        ))}
+      </div>
+
+      {selectedTrend ? (
+        <p className="sect-f" style={{ marginTop: -8, marginBottom: 12 }}>
+          {selectedTrend.label}: {selectedTrend.setsCompleted} sets •{" "}
+          {formatAmount(selectedTrend.volumeKg)}kg • {formatAmount(selectedTrend.calories)} kcal
+        </p>
+      ) : null}
+
+      <div className="card">
+        <h2>Today&apos;s workout</h2>
+        {trainingCompleted && latestWorkout ? (
+          <>
+            <p className="t-head">Training done</p>
+            <p className="t-foot" style={{ marginTop: 4 }}>
+              {latestWorkout.name} • {completedSetCount(latestWorkout)} sets
+            </p>
+            <Link href="/" className="btn" style={{ marginTop: 14 }}>
+              Open Train
+            </Link>
+          </>
+        ) : (
+          <>
+            <p className="big">{suggestedSplit.title}</p>
+            <p className="t-foot" style={{ marginTop: 6 }}>
+              {suggestedSplit.detail}
+            </p>
+            <Link
+              href={`/?suggest=${suggestedSplit.id}`}
+              className="btn primary"
+              style={{ marginTop: 14 }}
             >
+              Start {suggestedSplit.title}
+            </Link>
+          </>
+        )}
+      </div>
+
+      <div className="sect">
+        <span className="sect-t">Eat</span>
+        <div className="sect-b">
+          <Link href="/diet" className={`lrow tap ${proteinDeficit ? "danger" : ""}`}>
+            <span className="lrow-i" style={{ background: proteinDeficit ? "var(--red)" : "var(--acc)" }}>
               <Utensils className="h-4 w-4" />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-ink">
-                {proteinDeficit ? "Eat · Hit protein" : "Eat · On track"}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-mute">
-                {formatAmount(gaps.calories)} kcal left • {formatAmount(gaps.protein_g, 1)}g protein left
+            <span className="lrow-m">
+              <span className="lrow-t">{proteinDeficit ? "Hit protein" : "Stay on macros"}</span>
+              <span className="lrow-s">
+                {formatAmount(gaps.calories)} kcal left • {formatAmount(gaps.protein_g, 1)}g protein
               </span>
             </span>
-            <ChevronRight className="h-4 w-4 text-faint" />
+            <ChevronRight className="lrow-c h-4 w-4" />
           </Link>
+        </div>
+      </div>
 
+      <div className="sect">
+        <span className="sect-t">Recover</span>
+        <div className="sect-b">
           <button
             type="button"
+            className="lrow tap"
             onClick={() => {
               document.getElementById("bedtime")?.scrollIntoView({
                 behavior: "smooth",
                 block: "start",
               });
             }}
-            className="tap-target flex min-h-12 w-full items-center gap-3 py-3 text-left"
           >
             <span
-              className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                recoverHighlight ? "bg-warn/15 text-warn" : "bg-accent/12 text-accent"
-              }`}
+              className="lrow-i"
+              style={{ background: recoverHighlight ? "var(--orange)" : "var(--acc)" }}
             >
               <Moon className="h-4 w-4" />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-ink">
+            <span className="lrow-m">
+              <span className="lrow-t">
                 {uncheckedBedtime === 0
-                  ? "Recover · Stack done"
-                  : `Recover · ${uncheckedBedtime} left`}
+                  ? "Recovery stack done"
+                  : `${uncheckedBedtime} bedtime check${uncheckedBedtime === 1 ? "" : "s"} left`}
               </span>
-              <span className="mt-0.5 block truncate text-xs text-mute">
+              <span className="lrow-s">
                 {recoverHighlight
                   ? "Training is done — take magnesium before bed."
                   : "Sleep, magnesium, and electrolytes protect tomorrow."}
               </span>
             </span>
-            <ChevronRight className="h-4 w-4 text-faint" />
+            <ChevronRight className="lrow-c h-4 w-4" />
           </button>
         </div>
-      </section>
+      </div>
 
-      <section className="surface mt-4 p-4">
-        <div className="flex items-end justify-between">
-          <div>
-            <p className="eyebrow">Nutrition</p>
-            <h2 className="mt-2 font-display text-lg font-semibold">Macros</h2>
-          </div>
-          <p className="text-[11px] text-faint">{formatAmount(dietTargets.calories)} kcal target</p>
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className="card">
+        <h2>Readiness {readiness}%</h2>
+        <p className="big">{formatAmount(Math.max(0, gaps.calories))}</p>
+        <p className="t-foot">kcal remaining</p>
+        <Meter value={readiness} tone={meterTone(readiness)} />
+        <div className="mt-3 grid grid-cols-3 gap-2">
           {macros.slice(0, 3).map((macro) => (
-            <div key={macro.label} className="rounded-control bg-inset px-3 py-3">
-              <p className="text-[11px] text-faint">{macro.label}</p>
-              <p className="mt-1 font-display text-lg font-semibold tabular-nums">
+            <div key={macro.label}>
+              <p className="t-cap" style={{ color: "var(--label-3)" }}>
+                {macro.label}
+              </p>
+              <p className="t-head">
                 {formatAmount(macro.consumed, macro.id === "calories" ? 0 : 0)}
               </p>
               <Meter value={macro.percent} tone={meterTone(macro.percent)} />
             </div>
           ))}
         </div>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          {macros.slice(3).map((macro) => (
-            <div key={macro.label} className="rounded-control bg-inset px-3 py-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-mute">{macro.label}</span>
-                <span className="tabular-nums text-faint">
-                  {formatAmount(macro.consumed, 1)} / {formatAmount(macro.target)}
+      </div>
+
+      <div className="sect">
+        <span className="sect-t">Coach</span>
+        <div className="sect-b">
+          {recommendations.length === 0 ? (
+            <div className="lrow">
+              <span className="lrow-m">
+                <span className="lrow-t">No critical gaps</span>
+                <span className="lrow-s">Keep logging meals.</span>
+              </span>
+            </div>
+          ) : (
+            recommendations.map((item) => (
+              <div
+                key={item.id}
+                className={`lrow ${item.id === "protein" ? "danger" : ""}`}
+              >
+                <span className="lrow-m">
+                  <span className="lrow-t">{item.badge}</span>
+                  <span className="lrow-s">{item.suggestion}</span>
                 </span>
               </div>
-              <Meter value={macro.percent} tone={meterTone(macro.percent)} />
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="surface mt-4 p-4">
-        <p className="eyebrow">Coach</p>
-        <h2 className="mt-2 font-display text-lg font-semibold">Gaps</h2>
-        {recommendations.length === 0 ? (
-          <p className="mt-3 text-sm text-mute">
-            No critical fiber, protein, or magnesium gaps right now. Keep logging meals.
-          </p>
-        ) : (
-          <div className="mt-3 flex flex-col gap-2">
-            {recommendations.map((item) => (
-              <article
-                key={item.id}
-                className={`rounded-control px-3 py-3 ${
-                  item.id === "protein"
-                    ? "bg-danger/10"
-                    : item.id === "fiber"
-                      ? "bg-warn/10"
-                      : "bg-accent/10"
-                }`}
-              >
-                <p
-                  className={`text-[11px] font-semibold uppercase tracking-wide ${
-                    item.id === "protein"
-                      ? "text-danger"
-                      : item.id === "fiber"
-                        ? "text-warn"
-                        : "text-accent"
-                  }`}
-                >
-                  {item.badge}
-                </p>
-                <p className="mt-1 text-sm leading-5 text-ink">{item.suggestion}</p>
-              </article>
-            ))}
-          </div>
-        )}
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-mute">
-          <p className="rounded-control bg-inset px-3 py-2">
-            Calories left <span className="font-semibold text-ink">{formatAmount(gaps.calories)}</span>
-          </p>
-          <p className="rounded-control bg-inset px-3 py-2">
-            Protein left <span className="font-semibold text-ink">{formatAmount(gaps.protein_g, 1)}g</span>
-          </p>
-          <p className="rounded-control bg-inset px-3 py-2">
-            Carbs left <span className="font-semibold text-ink">{formatAmount(gaps.carbs_g, 1)}g</span>
-          </p>
-          <p className="rounded-control bg-inset px-3 py-2">
-            Fiber left <span className="font-semibold text-ink">{formatAmount(gaps.fiber_g, 1)}g</span>
-          </p>
+            ))
+          )}
         </div>
         {trainingCompleted ? (
-          <p className="mt-3 text-xs text-accent">
+          <p className="sect-f">
             {highIntensity ? "High-intensity session logged. " : "Training logged. "}
             Magnesium glycinate (400mg) and electrolytes are critical for recovery.
           </p>
         ) : null}
-      </section>
+      </div>
 
-      <section className="surface mt-4 p-4">
+      <div className="sect">
         <button
           type="button"
           onClick={() => setAuditOpen((open) => !open)}
-          className="flex w-full items-center justify-between text-left"
+          className="lrow tap"
+          style={{ background: "transparent", paddingLeft: 4 }}
           aria-expanded={auditOpen}
         >
-          <div>
-            <p className="eyebrow">Details</p>
-            <h2 className="mt-2 font-display text-lg font-semibold">Micronutrient audit</h2>
-          </div>
+          <span className="lrow-m">
+            <span className="sect-t" style={{ padding: 0 }}>
+              Details
+            </span>
+            <span className="lrow-t">Micronutrient audit</span>
+          </span>
           <ChevronDown
-            className={`h-4 w-4 text-faint transition ${auditOpen ? "rotate-180" : ""}`}
+            className="lrow-c h-4 w-4"
+            style={{ transform: auditOpen ? "rotate(180deg)" : undefined }}
           />
         </button>
         {auditOpen ? (
-          <div className="mt-4 flex flex-col gap-3">
+          <div className="card" style={{ marginTop: 8 }}>
             {microAudit.map((marker) => (
-              <div key={marker.id}>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-ink">{marker.name}</span>
-                  <span className="font-mono text-xs text-faint">
+              <div key={marker.id} style={{ marginBottom: 12 }}>
+                <div className="flex items-center justify-between">
+                  <span className="t-sub">{marker.name}</span>
+                  <span className="t-foot">
                     {formatAmount(marker.consumed, 1)} / {formatAmount(marker.target)} {marker.unit}
                   </span>
                 </div>
@@ -636,32 +627,13 @@ export default function PulsePage() {
             ))}
           </div>
         ) : null}
-      </section>
+      </div>
 
-      <section className="surface mb-4 mt-4 p-4">
+      <div className="card">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="eyebrow">Progress</p>
-            <h2 className="mt-2 font-display text-lg font-semibold">7-day pulse</h2>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <button
-              type="button"
-              onClick={async () => {
-                const markdown = weeklySummaryMarkdown(weekTrends, workouts);
-                try {
-                  await navigator.clipboard.writeText(markdown);
-                  setCopiedSummary(true);
-                  window.setTimeout(() => setCopiedSummary(false), 2000);
-                } catch {
-                  setCopiedSummary(false);
-                }
-              }}
-              className="btn-ghost h-12 px-3 text-xs"
-            >
-              {copiedSummary ? "Copied" : "Copy week"}
-            </button>
-            <svg viewBox="0 0 84 28" className="h-7 w-[84px] text-accent" aria-hidden="true">
+            <h2>7-day pulse</h2>
+            <svg viewBox="0 0 84 28" className="h-7 w-[84px]" style={{ color: "var(--acc)" }} aria-hidden="true">
               <polyline
                 fill="none"
                 stroke="currentColor"
@@ -672,159 +644,71 @@ export default function PulsePage() {
               />
             </svg>
           </div>
+          <button
+            type="button"
+            className="btn sm"
+            onClick={async () => {
+              const markdown = weeklySummaryMarkdown(weekTrends, workouts);
+              try {
+                await navigator.clipboard.writeText(markdown);
+                setCopiedSummary(true);
+                window.setTimeout(() => setCopiedSummary(false), 2000);
+              } catch {
+                setCopiedSummary(false);
+              }
+            }}
+          >
+            {copiedSummary ? "Copied" : "Copy week"}
+          </button>
         </div>
-
         {!hasWeekActivity ? (
-          <p className="mt-3 text-xs text-faint">Log sessions to unlock 7-day trends</p>
+          <p className="t-foot">Log sessions to unlock 7-day trends</p>
         ) : null}
+      </div>
 
-        <div className="mt-4 grid h-28 grid-cols-7 items-end gap-2">
-          {weekTrends.map((day) => {
-            const relative = !hasWeekActivity
-              ? 10
-              : day.workoutCompleted
-                ? Math.max(18, Math.round((day.volumeKg / Math.max(maxVolume, 1)) * 100))
-                : 0;
-            const selected = activeTrendKey === day.key;
-            return (
-              <button
-                key={day.key}
-                type="button"
-                onClick={() =>
-                  setActiveTrendKey((current) => (current === day.key ? null : day.key))
-                }
-                className="flex h-full flex-col items-center justify-end gap-2 transition active:scale-98"
-                aria-label={`${day.label} volume ${Math.round(day.volumeKg)}kg`}
-              >
-                <div className="flex h-[88px] w-full items-end justify-center">
-                  {day.workoutCompleted || !hasWeekActivity ? (
-                    <div
-                      className={`w-3.5 rounded-t-md transition-all duration-300 ${
-                        hasWeekActivity ? "bg-accent" : "bg-inset"
-                      } ${selected ? "opacity-100" : "opacity-80"}`}
-                      style={{ height: `${relative}%` }}
-                    />
-                  ) : (
-                    <div className="h-1.5 w-3.5 rounded-full bg-inset" />
-                  )}
-                </div>
-                <span
-                  className={`text-[10px] font-medium ${
-                    selected ? "text-accent" : "text-faint"
-                  }`}
-                >
-                  {day.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {selectedTrend ? (
-          <div className="mt-3 rounded-control bg-accent/10 px-3 py-2 text-xs text-accent">
-            {selectedTrend.label}: {selectedTrend.setsCompleted} sets •{" "}
-            {formatAmount(selectedTrend.volumeKg)}kg • {formatAmount(selectedTrend.calories)} kcal •{" "}
-            {formatAmount(selectedTrend.protein_g, 1)}g protein
-          </div>
-        ) : (
-          <p className="mt-3 text-[11px] text-faint">Tap a day for volume and nutrition detail.</p>
-        )}
-
-        <div className="mt-4 grid grid-cols-7 gap-2">
-          {weekTrends.map((day) => (
-            <div key={`${day.key}-dot`} className="flex justify-center">
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  day.proteinAdherence === "hit"
-                    ? "bg-accent"
-                    : day.proteinAdherence === "partial"
-                      ? "bg-warn"
-                      : "bg-inset"
-                }`}
-                aria-label={`${day.label} protein ${day.proteinAdherence}`}
-              />
-            </div>
-          ))}
-        </div>
-        <p className="mt-2 text-center text-[10px] uppercase tracking-wide text-faint">
-          Protein adherence
-        </p>
-      </section>
-
-      <section id="bedtime" className="surface scroll-mt-24 p-4">
-        <div className="flex items-center gap-2">
-          <Moon className="h-4 w-4 text-accent" />
-          <h2 className="font-display text-lg font-semibold">Bedtime</h2>
-        </div>
-        <p className="mt-1 text-sm text-mute">
-          Recovery stack tied to today&apos;s training and macros.
-        </p>
-
+      <section id="bedtime" className="sect" style={{ scrollMarginTop: 24 }}>
+        <span className="sect-t">Bedtime</span>
         {proteinDeficit ? (
-          <article className="mt-4 rounded-control bg-danger/10 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">
+          <div className="card" style={{ background: "color-mix(in srgb, var(--red) 12%, transparent)" }}>
+            <p className="t-head" style={{ color: "var(--red)" }}>
               Protein deficit
             </p>
-            <p className="mt-1 text-sm leading-5 text-ink">
+            <p className="t-foot" style={{ marginTop: 4 }}>
               You are at {formatAmount(totals.protein_g, 1)}g / {formatAmount(proteinTarget)}g (
               {Math.round(proteinRatio * 100)}%). Take 1 scoop whey or 200g Greek yogurt/paneer.
             </p>
-          </article>
+          </div>
         ) : null}
-
         {fiberDeficit ? (
-          <article className="mt-3 rounded-control bg-warn/10 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-warn">
+          <div className="card" style={{ background: "color-mix(in srgb, var(--orange) 12%, transparent)" }}>
+            <p className="t-head" style={{ color: "var(--orange)" }}>
               Fiber deficit
             </p>
-            <p className="mt-1 text-sm leading-5 text-ink">
+            <p className="t-foot" style={{ marginTop: 4 }}>
               {formatAmount(totals.fiber_g, 1)}g logged. Take 2 tbsp isabgol / chia seeds before bed.
             </p>
-          </article>
+          </div>
         ) : null}
-        <div className="mt-4 flex flex-col gap-2">
+        <div className="sect-b">
           {BEDTIME_ITEMS.map((item) => {
             const isChecked = checked.includes(item.id);
             return (
-              <article key={item.id} className="rounded-control bg-inset p-3">
-                <div className="flex items-start gap-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleCheck(item.id)}
-                    className={`tap-target mt-0.5 flex h-12 w-12 items-center justify-center rounded-control border transition active:scale-95 ${
-                      isChecked
-                        ? "border-accent bg-accent text-accent-fg"
-                        : "border-line bg-canvas text-transparent"
-                    }`}
-                    aria-pressed={isChecked}
-                    aria-label={`Mark ${item.title} complete`}
-                  >
-                    <Check className="h-4 w-4" />
-                  </button>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3
-                        className={`text-sm font-semibold ${
-                          isChecked ? "text-mute line-through" : "text-ink"
-                        }`}
-                      >
-                        {item.title}
-                      </h3>
-                      {item.id === "magnesium" && trainingCompleted ? (
-                        <span className="inline-flex rounded-full bg-danger/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-danger">
-                          Critical
-                        </span>
-                      ) : (item.id === "magnesium" && recoveryFlags.magnesium) ||
-                        (item.id === "electrolytes" && recoveryFlags.electrolytes) ? (
-                        <span className="inline-flex rounded-full bg-warn/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warn">
-                          {isChecked ? "Stacked" : "Recommended"}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-xs text-mute">{item.detail}</p>
-                  </div>
-                </div>
-              </article>
+              <button
+                key={item.id}
+                type="button"
+                className="lrow tap"
+                onClick={() => toggleCheck(item.id)}
+              >
+                <span className={`ck ${isChecked ? "on" : ""}`}>
+                  <Check className="h-3.5 w-3.5" />
+                </span>
+                <span className="lrow-m">
+                  <span className="lrow-t" style={isChecked ? { color: "var(--label-2)", textDecoration: "line-through" } : undefined}>
+                    {item.title}
+                  </span>
+                  <span className="lrow-s">{item.detail}</span>
+                </span>
+              </button>
             );
           })}
         </div>

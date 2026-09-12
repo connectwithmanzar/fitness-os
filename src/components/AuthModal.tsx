@@ -26,17 +26,11 @@ export function AccountButton({
     <button
       type="button"
       onClick={onClick}
-      className="tap-target relative flex min-h-12 items-center gap-1.5 rounded-full border border-line bg-raised px-3.5 text-sm font-semibold text-ink transition hover:border-accent/50 active:scale-95"
+      className="iconbtn"
       aria-label="Open account"
     >
-      <User className="h-3.5 w-3.5" />
-      Account
-      <span
-        className={`h-2 w-2 rounded-full ${
-          signedIn ? "bg-accent" : "bg-faint"
-        }`}
-        aria-hidden="true"
-      />
+      <User className="h-4 w-4" strokeWidth={1.7} />
+      <span className={`dot ${signedIn ? "on" : ""}`} aria-hidden="true" />
     </button>
   );
 }
@@ -154,47 +148,44 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
-      onClick={onClose}
-    >
+    <div className="sheet-back" style={{ zIndex: 80 }} onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="auth-title"
-        className="w-full max-w-md rounded-t-[1.75rem] border border-line bg-raised p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-float sm:rounded-card"
+        className="sheet"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/15 sm:hidden" />
+        <div className="grab" />
         <div className="mb-4 flex items-center justify-between">
-          <h2 id="auth-title" className="font-display text-lg font-semibold text-ink">
-            Account
-          </h2>
+          <h3 id="auth-title">Account</h3>
           <button
             type="button"
             onClick={onClose}
-            className="tap-target flex h-12 w-12 items-center justify-center rounded-full text-mute transition hover:text-ink active:scale-98"
+            className="iconbtn"
             aria-label="Close account"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {userEmail ? (
           <div>
-            <p className="text-sm text-mute">Signed in as</p>
-            <p className="mt-1 text-sm font-semibold text-ink">{userEmail}</p>
-            <p className="chip-accent mt-3">
-              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
-              Cloud sync on
+            <p className="t-foot">Signed in as</p>
+            <p className="t-head" style={{ marginTop: 4 }}>
+              {userEmail}
             </p>
+            <span className="chip acc" style={{ marginTop: 12 }}>
+              Cloud sync on
+            </span>
             <button
               type="button"
               onClick={() => {
                 void signOut();
               }}
               disabled={busy}
-              className="btn-secondary mt-5 disabled:opacity-60"
+              className="btn"
+              style={{ marginTop: 20 }}
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Sign Out
@@ -206,22 +197,14 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => setTab("signin")}
-                className={`tap-target min-h-12 rounded-control py-3 text-sm font-semibold transition active:scale-95 ${
-                  tab === "signin"
-                    ? "bg-accent text-accent-fg"
-                    : "border border-line bg-inset text-mute"
-                }`}
+                className={`btn ${tab === "signin" ? "primary" : ""}`}
               >
                 Sign In
               </button>
               <button
                 type="button"
                 onClick={() => setTab("signup")}
-                className={`tap-target min-h-12 rounded-control py-3 text-sm font-semibold transition active:scale-95 ${
-                  tab === "signup"
-                    ? "bg-accent text-accent-fg"
-                    : "border border-line bg-inset text-mute"
-                }`}
+                className={`btn ${tab === "signup" ? "primary" : ""}`}
               >
                 Create Account
               </button>
@@ -240,7 +223,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="Email"
-                className="input-field"
+                className="field"
               />
               <input
                 type="password"
@@ -249,12 +232,12 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Password"
-                className="input-field"
+                className="field"
               />
               <button
                 type="submit"
                 disabled={busy}
-                className="btn-primary disabled:opacity-70"
+                className="btn primary"
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin text-accent-fg" /> : null}
                 {tab === "signin" ? "Sign In" : "Create Account"}
@@ -264,14 +247,16 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
         )}
 
         {error ? (
-          <p className="mt-3 text-sm font-medium text-warn">{error}</p>
+          <p className="mt-3 t-foot" style={{ color: "var(--orange)" }}>
+            {error}
+          </p>
         ) : null}
 
         <InstallAppHint placement="account" />
 
-        <div className="mt-5 surface-muted p-3">
-          <p className="eyebrow">Local backup</p>
-          <p className="mt-1 text-xs text-mute">
+        <div className="card" style={{ marginTop: 20 }}>
+          <h2>Local backup</h2>
+          <p className="t-foot">
             Export or merge meals, workouts, targets, and splits. No cloud required.
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -281,14 +266,14 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
                 downloadBackup();
                 setBackupNote("Backup downloaded.");
               }}
-              className="btn-secondary"
+              className="btn"
             >
               Export JSON
             </button>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="btn-secondary"
+              className="btn"
             >
               Import JSON
             </button>
@@ -328,7 +313,9 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
             }}
           />
           {backupNote ? (
-            <p className="mt-2 text-xs text-accent">{backupNote}</p>
+            <p className="t-foot" style={{ marginTop: 8, color: "var(--acc)" }}>
+              {backupNote}
+            </p>
           ) : null}
         </div>
 
@@ -338,7 +325,7 @@ export function AuthModal({ isOpen, onClose, onAuthChange }: AuthModalProps) {
             setGuestMode(true);
             onClose();
           }}
-          className="mt-4 w-full text-center text-sm text-mute underline-offset-4 hover:text-ink hover:underline"
+          className="btn ghost"
         >
           Continue as Guest
         </button>

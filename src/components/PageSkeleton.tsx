@@ -1,13 +1,13 @@
 export function PageSkeleton() {
   return (
-    <div className="min-h-dvh bg-canvas px-5 pb-36 pt-4">
-      <div className="flex items-center justify-between">
-        <div className="h-8 w-36 animate-pulse rounded-control bg-inset" />
-        <div className="h-12 w-12 animate-pulse rounded-full bg-inset" />
+    <div>
+      <div className="hdr">
+        <div className="h-9 w-36 animate-pulse rounded-[10px] bg-[var(--surface)]" />
+        <div className="h-9 w-9 animate-pulse rounded-full bg-[var(--surface)]" />
       </div>
-      <div className="mt-6 h-36 animate-pulse rounded-card bg-raised" />
-      <div className="mt-4 h-24 animate-pulse rounded-card bg-raised" />
-      <div className="mt-4 h-44 animate-pulse rounded-card bg-raised" />
+      <div className="h-20 animate-pulse rounded-[14px] bg-[var(--surface)]" />
+      <div className="mt-3 h-28 animate-pulse rounded-[14px] bg-[var(--surface)]" />
+      <div className="mt-3 h-40 animate-pulse rounded-[14px] bg-[var(--surface)]" />
     </div>
   );
 }

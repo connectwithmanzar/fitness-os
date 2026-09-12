@@ -87,16 +87,19 @@ export function InstallAppHint({ placement = "home" }: InstallAppHintProps) {
   };
 
   return (
-    <div className="mt-4 rounded-card border border-accent/20 bg-accent/10 p-3">
+    <div className="toast" style={{ marginTop: placement === "account" ? 16 : 0 }}>
       <div className="flex items-start gap-3">
-        <Share className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
+        <Share className="mt-0.5 h-5 w-5 shrink-0" style={{ color: "var(--acc)" }} />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-ink">Install Fitness OS</p>
-          <p className="mt-1 text-xs leading-5 text-mute">{copy}</p>
+          <p className="t-head">Install Fitness OS</p>
+          <p className="t-foot" style={{ marginTop: 4 }}>
+            {copy}
+          </p>
           {installEvent ? (
             <button
               type="button"
-              className="btn-primary mt-3 w-auto px-4"
+              className="btn primary sm"
+              style={{ marginTop: 10 }}
               onClick={async () => {
                 await installEvent.prompt();
                 setInstallEvent(null);
@@ -111,10 +114,10 @@ export function InstallAppHint({ placement = "home" }: InstallAppHintProps) {
           <button
             type="button"
             onClick={dismiss}
-            className="tap-target flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-mute transition active:scale-95"
+            className="iconbtn"
             aria-label="Dismiss install hint"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         ) : null}
       </div>

@@ -39,11 +39,7 @@ function PillRow<T extends string>({
             key={option}
             type="button"
             onClick={() => onChange(option)}
-            className={`tap-target min-h-12 whitespace-nowrap rounded-full border px-4 text-sm font-semibold transition active:scale-95 ${
-              active
-                ? "border-accent bg-accent/12 text-accent"
-                : "border-line bg-raised text-mute"
-            }`}
+            className={`chip lg ${active ? "acc" : ""}`}
           >
             {option}
           </button>
@@ -88,40 +84,36 @@ export function ExerciseSelectorModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-end justify-center overflow-x-hidden bg-black/70 backdrop-blur-sm sm:items-center"
-      onClick={resetAndClose}
-    >
+    <div className="sheet-back" onClick={resetAndClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="exercise-library-title"
-        className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-line bg-raised pb-[env(safe-area-inset-bottom)] sm:rounded-card"
+        className="sheet"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/15 sm:hidden" />
-        <div className="flex items-center justify-between px-5 pb-2 pt-3">
-          <h2 id="exercise-library-title" className="font-display text-lg font-semibold text-ink">
-            Exercise Library
-          </h2>
+        <div className="grab" />
+        <div className="mb-3 flex items-center justify-between">
+          <h3 id="exercise-library-title">Exercise library</h3>
           <button
             type="button"
             onClick={resetAndClose}
-            className="tap-target flex h-12 w-12 items-center justify-center rounded-full text-mute"
+            className="iconbtn"
             aria-label="Close exercise library"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="space-y-3 px-5">
+        <div className="space-y-3">
           <label className="relative block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--label-3)" }} />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search exercises..."
-              className="input-field pl-10"
+              className="field"
+              style={{ paddingLeft: 40 }}
             />
           </label>
           <PillRow
@@ -136,47 +128,41 @@ export function ExerciseSelectorModal({
           />
         </div>
 
-        <ul className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-5">
+        <div className="sect-b mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {results.length === 0 ? (
-            <li className="py-10 text-center text-sm text-mute">No matches. Try another filter.</li>
+            <p className="empty">No matches. Try another filter.</p>
           ) : (
             results.map((exercise) => (
-              <li key={exercise.id} className="border-b border-line">
-                <button
-                  type="button"
-                  onClick={() => setDetail(exercise)}
-                  className="flex w-full items-center gap-3 py-3 text-left active:scale-[0.99]"
-                >
-                  <ExerciseThumb
-                    name={exercise.name}
-                    muscle={exercise.muscle}
-                    gifUrl={exercise.gifUrl}
-                    stillUrl={exercise.stillUrl}
-                    className="h-[52px] w-[52px] shrink-0 rounded-xl object-cover"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-ink">{exercise.name}</p>
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      <span className="chip">
-                        {exercise.muscle}
-                      </span>
-                      <span className="chip">
-                        {exercise.equipment}
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              </li>
+              <button
+                key={exercise.id}
+                type="button"
+                onClick={() => setDetail(exercise)}
+                className="lrow tap"
+              >
+                <ExerciseThumb
+                  name={exercise.name}
+                  muscle={exercise.muscle}
+                  gifUrl={exercise.gifUrl}
+                  stillUrl={exercise.stillUrl}
+                  className="h-[44px] w-[44px] shrink-0 rounded-[9px] object-cover"
+                />
+                <span className="lrow-m">
+                  <span className="lrow-t truncate">{exercise.name}</span>
+                  <span className="lrow-s">
+                    {exercise.muscle} · {exercise.equipment}
+                  </span>
+                </span>
+              </button>
             ))
           )}
-        </ul>
+        </div>
 
-        <div className="flex gap-2 border-t border-line px-5 py-4">
+        <div className="mt-3 flex gap-2">
           <input
             value={customName}
             onChange={(event) => setCustomName(event.target.value)}
             placeholder="Custom movement"
-            className="input-field min-w-0 flex-1"
+            className="field"
           />
           <button
             type="button"
@@ -196,7 +182,7 @@ export function ExerciseSelectorModal({
                 defaultSets: 3,
               });
             }}
-            className="btn-primary w-auto shrink-0 px-4"
+            className="btn primary sm"
           >
             Add
           </button>
@@ -215,15 +201,13 @@ export function ExerciseSelectorModal({
             role="dialog"
             aria-modal="true"
             aria-labelledby="exercise-detail-title"
-            className="w-full max-w-md overflow-hidden rounded-t-[1.75rem] border border-line bg-raised p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-card"
+            className="sheet"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
-              <h3 id="exercise-detail-title" className="font-display text-lg font-semibold text-ink">
-                {detail.name}
-              </h3>
-              <button type="button" onClick={() => setDetail(null)} aria-label="Close detail">
-                <X className="h-5 w-5 text-mute" />
+              <h3 id="exercise-detail-title">{detail.name}</h3>
+              <button type="button" className="iconbtn" onClick={() => setDetail(null)} aria-label="Close detail">
+                <X className="h-4 w-4" />
               </button>
             </div>
             <ExerciseThumb
@@ -236,7 +220,7 @@ export function ExerciseSelectorModal({
               className="mt-4 h-52 w-full rounded-2xl object-contain"
             />
             <div className="mt-3 flex flex-wrap gap-2">
-              <span className="chip-accent">
+              <span className="chip acc">
                 {detail.muscle}
               </span>
               <span className="chip">
@@ -251,7 +235,8 @@ export function ExerciseSelectorModal({
             <button
               type="button"
               onClick={() => addExercise(detail)}
-              className="btn-primary mt-5"
+              className="btn primary"
+              style={{ marginTop: 16 }}
             >
               Add to Routine
             </button>
