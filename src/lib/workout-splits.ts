@@ -1,4 +1,5 @@
 import { findExerciseById, findExerciseByName, type LibraryExercise } from "@/lib/exerciseDatabase";
+import { notifyFitnessDataChanged } from "@/lib/fitness-events";
 
 export type WorkoutSplitId =
   | "push"
@@ -172,6 +173,27 @@ export function saveCustomSplit(split: WorkoutSplit): WorkoutSplit[] {
     ...loadCustomSplits().filter((item) => item.id !== split.id),
   ];
   persistCustomSplits(next);
+  notifyFitnessDataChanged();
+  return next;
+}
+
+export function deleteCustomSplit(id: string): WorkoutSplit[] {
+  const next = loadCustomSplits().filter((item) => item.id !== id);
+  persistCustomSplits(next);
+  notifyFitnessDataChanged();
+  return next;
+}
+
+export function renameCustomSplit(id: string, title: string): WorkoutSplit[] {
+  const trimmed = title.trim();
+  if (trimmed.length === 0) {
+    return loadCustomSplits();
+  }
+  const next = loadCustomSplits().map((item) =>
+    item.id === id ? { ...item, title: trimmed } : item
+  );
+  persistCustomSplits(next);
+  notifyFitnessDataChanged();
   return next;
 }
 

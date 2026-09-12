@@ -12,13 +12,15 @@ import {
 } from "@/lib/exerciseDatabase";
 import { getSupabase } from "@/lib/supabaseClient";
 import {
-  allWorkoutSplits,
+  deleteCustomSplit,
   exercisesForSplit,
   loadCustomSplits,
+  renameCustomSplit,
   saveCustomSplit,
   WORKOUT_SPLITS,
   type WorkoutSplit,
 } from "@/lib/workout-splits";
+import { useReloadLocalFitnessData } from "@/hooks/useReloadLocalFitnessData";
 import {
   appendWorkoutHistory,
   completedSetCount,
@@ -64,6 +66,11 @@ type ActiveWorkoutSession = {
   startedAt: string;
   finishedAt: string | null;
   exercises: WorkoutExercise[];
+};
+
+type PendingPlan = {
+  title: string;
+  exerciseIds: string[];
 };
 
 function createId(): string {
@@ -171,6 +178,12 @@ function isSession(value: unknown): value is ActiveWorkoutSession {
   }
   const record = value as ActiveWorkoutSession;
   return typeof record.id === "string" && Array.isArray(record.exercises);
+}
+
+function liftIdsFromExercises(exercises: WorkoutExercise[]): string[] {
+  return exercises.map(
+    (exercise) => findExerciseByName(exercise.name)?.id ?? exercise.name
+  );
 }
 
 function sessionName(session: ActiveWorkoutSession): string {
@@ -299,6 +312,8 @@ export default function WorkoutPage() {
   const [customSplits, setCustomSplits] = useState<WorkoutSplit[]>([]);
   const [splitName, setSplitName] = useState("");
   const [suggestedSplitId, setSuggestedSplitId] = useState<string | null>(null);
+  const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
+  const dataTick = useReloadLocalFitnessData();
 
   useEffect(() => {
     try {
@@ -351,6 +366,13 @@ export default function WorkoutPage() {
     if (!hydrated) {
       return;
     }
+    setCustomSplits(loadCustomSplits());
+  }, [dataTick, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
     if (!session) {
       window.localStorage.removeItem(STORAGE_KEY);
       return;
@@ -398,6 +420,49 @@ export default function WorkoutPage() {
     setSession(createSession(split, history));
     setFinishError(null);
     setRestRemaining(null);
+    setPendingPlan(null);
+    setSplitName("");
+  };
+
+  const savePlan = (title: string, exerciseIds: string[]) => {
+    const trimmed = title.trim() || "My plan";
+    if (exerciseIds.length === 0) {
+      setBanner("Add at least one lift before saving a plan");
+      return;
+    }
+    setCustomSplits(
+      saveCustomSplit({
+        id: createId(),
+        title: trimmed,
+        detail: `${exerciseIds.length} lifts`,
+        exerciseIds,
+        custom: true,
+      })
+    );
+    setSplitName("");
+    setPendingPlan(null);
+    setBanner("Plan saved on this phone");
+  };
+
+  const renamePlan = (split: WorkoutSplit) => {
+    const next = window.prompt("Rename plan", split.title);
+    if (next === null) {
+      return;
+    }
+    const trimmed = next.trim();
+    if (trimmed.length === 0 || trimmed === split.title) {
+      return;
+    }
+    setCustomSplits(renameCustomSplit(split.id, trimmed));
+    setBanner("Plan renamed");
+  };
+
+  const removePlan = (split: WorkoutSplit) => {
+    if (!window.confirm(`Delete "${split.title}"? This only removes it from this phone.`)) {
+      return;
+    }
+    setCustomSplits(deleteCustomSplit(split.id));
+    setBanner("Plan deleted");
   };
 
   const cancelWorkout = () => {
@@ -448,6 +513,11 @@ export default function WorkoutPage() {
     setSession(null);
     setFinishError(null);
     setRestRemaining(null);
+    setPendingPlan({
+      title: completed.name,
+      exerciseIds: liftIdsFromExercises(validExercises),
+    });
+    setSplitName(completed.name);
     setBanner(synced ? "Workout saved + synced" : "Workout saved locally");
   };
 
@@ -557,12 +627,105 @@ export default function WorkoutPage() {
       <div className="mt-6">
         {!session ? (
           <div className="mb-8">
+            {pendingPlan ? (
+              <form
+                className="mb-6 rounded-2xl border border-emerald-500/40 bg-neutral-900 p-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  savePlan(splitName || pendingPlan.title, pendingPlan.exerciseIds);
+                }}
+              >
+                <p className="text-sm font-semibold text-white">Save this as my plan</p>
+                <p className="mt-1 text-xs leading-5 text-neutral-500">
+                  Keep {pendingPlan.exerciseIds.length} lifts for next time. Stored on this phone.
+                </p>
+                <input
+                  value={splitName}
+                  onChange={(event) => setSplitName(event.target.value)}
+                  placeholder={pendingPlan.title}
+                  className="mt-3 min-h-12 w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 text-base text-white outline-none focus:border-emerald-500"
+                />
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="submit"
+                    className="tap-target min-h-12 rounded-xl bg-emerald-500 text-sm font-semibold text-black transition active:scale-95"
+                  >
+                    Save plan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingPlan(null);
+                      setSplitName("");
+                    }}
+                    className="tap-target min-h-12 rounded-xl border border-neutral-700 text-sm font-semibold text-neutral-300 transition active:scale-95"
+                  >
+                    Not now
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
+            {customSplits.length > 0 ? (
+              <section className="mb-8">
+                <h2 className="text-lg font-semibold">My plans</h2>
+                <p className="mt-1 text-sm text-neutral-500">
+                  Custom splits saved on this phone.
+                </p>
+                <div className="mt-3 space-y-3">
+                  {customSplits.map((split) => (
+                    <article
+                      key={split.id}
+                      className={`rounded-2xl border bg-neutral-900 p-4 ${
+                        suggestedSplitId === split.id
+                          ? "border-emerald-500"
+                          : "border-neutral-800"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{split.title}</p>
+                          <p className="mt-1 text-xs leading-5 text-neutral-500">{split.detail}</p>
+                          <span className="mt-2 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+                            Custom
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startSplit(split)}
+                          className="tap-target min-h-12 rounded-xl bg-emerald-500 text-sm font-semibold text-black transition active:scale-95"
+                        >
+                          Start
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => renamePlan(split)}
+                          className="tap-target min-h-12 rounded-xl border border-neutral-700 text-sm font-semibold text-neutral-200 transition active:scale-95"
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removePlan(split)}
+                          className="tap-target min-h-12 rounded-xl border border-red-500/40 text-sm font-semibold text-red-300 transition active:scale-95"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             <h2 className="text-lg font-semibold">Start a session</h2>
             <p className="mt-1 text-sm text-neutral-500">
               Pick a split to pre-load compounds, or start empty and add lifts yourself.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
-              {allWorkoutSplits(customSplits).map((split) => (
+              {WORKOUT_SPLITS.map((split) => (
                 <button
                   key={split.id}
                   type="button"
@@ -577,11 +740,6 @@ export default function WorkoutPage() {
                 >
                   <p className="text-sm font-semibold text-white">{split.title}</p>
                   <p className="mt-1 text-xs leading-5 text-neutral-500">{split.detail}</p>
-                  {split.custom ? (
-                    <span className="mt-2 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
-                      Custom
-                    </span>
-                  ) : null}
                 </button>
               ))}
             </div>
@@ -829,25 +987,14 @@ export default function WorkoutPage() {
                 className="mb-3 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-3"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  const title = splitName.trim() || sessionName(session);
-                  setCustomSplits(
-                    saveCustomSplit({
-                      id: createId(),
-                      title,
-                      detail: `${session.exercises.length} lifts`,
-                      exerciseIds: session.exercises.map(
-                        (exercise) =>
-                          findExerciseByName(exercise.name)?.id ?? exercise.name
-                      ),
-                      custom: true,
-                    })
+                  savePlan(
+                    splitName.trim() || sessionName(session),
+                    liftIdsFromExercises(session.exercises)
                   );
-                  setSplitName("");
-                  setBanner("Split saved locally");
                 }}
               >
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                  Save as custom split
+                  Save this as my plan
                 </p>
                 <div className="mt-2 flex gap-2">
                   <input
